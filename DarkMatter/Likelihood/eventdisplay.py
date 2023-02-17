@@ -62,6 +62,8 @@ def createEventFile(dwarf, path=None, export=False, verbose=True, biasCut=0.2, e
 					N_log_on = round(float(Non[0]))
 					break
 
+		if alpha == 0.0: alpha = 1/6.
+		
 		with open(path+"/{}.anasum.log".format(run)) as f:
 			for line in f.readlines()[::-1]:
 				Noff = re.findall("OFF:([0-9.]+)", line)
@@ -333,7 +335,12 @@ def readData(dwarf, events=[], addTheta=False, th2Cut=0, eLowerCut=0, eUpperCut=
 			eMin = kwargs.pop("eMin", 500)
 			eMax = kwargs.pop("eMax", 2000)
 			cnts_off = bkg_ex_1D(events, eBinEdges, eMin=eMin, eMax=eMax)
-			
+	elif bkgModel == "gaus":
+		if addTheta:
+			cnts_off = bkg_gaus_2D(events, eBinEdges, tBinEdges, alpha = w_avg)
+		else:
+			cnts_off = bkg_gaus_1D(events, eBinEdges, alpha = w_avg)
+
 	if bkgModel is not None:
 		if addTheta:
 			for i in range(1, hOff_2d.GetNbinsX()+1):

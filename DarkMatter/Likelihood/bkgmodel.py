@@ -6,6 +6,8 @@ from scipy.optimize import curve_fit
 
 import matplotlib.pyplot as plt
 
+import scipy
+
 def bkg_sm_1D(events, binEdges, eMin = 0):
 	bkg = events[events[:,2]==0.0]
 	cnts, binEdges = np.histogram(bkg[:,0], bins=binEdges)
@@ -71,6 +73,27 @@ def pl_model(x, idx, Ntot, maxE, minE):
     fsum = ((r**n-1)/(r-1))
     N0 = Ntot/fsum/(E1**idx)
     return N0*x**idx
+
+def bkg_gaus_1D(events, binEdges, sigma=1, alpha=1):
+	bkg = events[events[:,2] == 0.0][:,0]
+	y, x = np.histogram(bkg, bins=binEdges)
+	y = y*alpha
+	y_idx = y.argmax()
+	#y_idx = [i for i, f in enumerate(y != 0) if f][0]
+	filtered_y = scipy.ndimage.gaussian_filter(y[y_idx:], sigma=sigma)
+	cnts = y[:y_idx].tolist() + filtered_y.tolist()
+	return np.asarray(cnts)/alpha
+
+def bkg_gaus_2D(events, eBinEdges, tBinEdges, sigma=1, alpha=1):
+	cnts = []
+
+	for i in range(len(tBinEdges)-1):
+		sub_events = events[(events[:,1] >= tBinEdges[i]) * (events[:,1] < tBinEdges[i+1])]
+		output = bkg_gaus_1D(sub_events, eBinEdges, sigma=sigma, alpha=alpha)
+		cnts.append(output)
+		
+	cnts=np.asarray(cnts).T
+	return cnts
 
 def bkg_ex_1D(events, binEdges, eMin = 300, eMax = 10000, plotting=False, overlap=False, order=1):
 	bkg = events[events[:,2] == 0.0][:,0]

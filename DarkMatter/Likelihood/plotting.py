@@ -302,17 +302,17 @@ def plotUnitarity(composite=[1e-1, 1e-2, 1e-3]):
     ax.set_ylabel(r'$\langle \sigma v \rangle$ [cm$^3$/s]',fontsize=13)
 
     #mpl.rcParams['lines.dashed_pattern'] = 7.5, 7.5
-    ax.axvline(194.,ls='--',c='gray',lw=1.)
+    ax.axvline(194.,ls="-",c='k',lw=0.8)
     ax.fill_between([10,194],[1.e-28,1.e-28],[1.e-16,1.e-16],color=(0.8,0.8,0.8),alpha=0.3)
 
-    ax.plot([10.,194],[2.4e-26,2.4e-26],c='red',lw=2.)
+    ax.plot([10.,194],[2.4e-26,2.4e-26],c='red',lw=1.5)
 
     #mpl.rcParams['lines.dotted_pattern'] = 1.1, 2.5
     mv=np.logspace(1.,np.log10(4.e4),100)
-    cv="#9467bd"
+    cv="k"
 
     for com in composite:
-        ax.plot(mv,Rlim(mv,com),ls='--',c=cv,lw=1.5,zorder=2)
+        ax.plot(mv,Rlim(mv,com),ls=(0, (3, 1, 1, 1, 1, 1)),c=cv,lw=0.8,zorder=2)
         if com == 1e-1:
             ax.text(3.5e4,8e-25,r'$R=(100~{\rm GeV})^{-1}$',fontsize=11,color="k", ha="right")
         elif com == 1e-2:
@@ -320,7 +320,7 @@ def plotUnitarity(composite=[1e-1, 1e-2, 1e-3]):
         elif com == 1e-3:
             ax.text(3.5e4,5e-21,r'$R=(1~{\rm GeV})^{-1}$',fontsize=11,color="k", ha="right")
     
-    ax.plot([10.,4.e4],[slim(10.),slim(4.e4)],c='#9467bd',lw=2.,zorder=2)
+    ax.plot([10.,4.e4],[slim(10.),slim(4.e4)],c=cv,lw=1.5,zorder=2)
 
     ax.set_xscale('log')
     ax.set_yscale('log')
