@@ -23,7 +23,7 @@ def center_pt(x):
     return (x[1:]+x[:-1])/2.
 
 def thetaEdges(thCut):
-    return np.arange(0, math.ceil(thCut*1000)/1000.+0.0001, step=0.001)
+    return np.arange(0, math.ceil(thCut*1000)/1000.+0.0001, step=0.002)
 
 def printRunList(dwarf, path=None, package ="EventDisplay", printOutput=False, log_only=False, ext=False):
     if package=="EventDisplay":

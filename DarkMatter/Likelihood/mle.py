@@ -169,7 +169,6 @@ class MLE:
                 hOn, hOff, N_on, N_off, events, alpha = eventdisplay.readData(self.dwarf, addTheta=self.addTheta, full_output=True, bkgModel=bkgModel, th2Cut=self.th2Cut, eLowerCut=self.eLowerCut, eUpperCut=self.eUpperCut, version=v, ext=self.ext, **kwargs)
                 self.hOff[v] = hOff
                 self.N_off_v[v] = N_off
-
         
         if verbose: print("[Log] Step 2: Events are loaded.")
         
@@ -436,7 +435,13 @@ class MLE:
                         val = 0 
                         p_off_err.append([evt[0]])
 
-                p_off.append([val, evt_version])   
+                p_off.append([val, evt_version])
+
+        if kwargs.pop("correction", False):
+            p_off = np.asarray(p_off)
+            minp = min(p_off[p_off!=0])
+            p_off[p_off==0] = minp
+            self._min_p = minp
 
         if self.singleIRF:
             p_off = [np.asarray(p_off)]
@@ -538,8 +543,10 @@ class MLE:
             if err_evt > 0:
                 if self.verbose:
                     print("\n")
-
-                print("[Warning] {:.0f} events have p_bkg of 0. They are ignored when calculating the likelihood.".format(err_evt))
+                    if kwargs.pop("correction", False):
+                        print("[Warning] {:.0f} events have p_bkg of 0. Set a minimum probability of 10^{:.3f}.".format(err_evt, np.log10(self._min_p)))
+                    else:
+                        print("[Warning] {:.0f} events have p_bkg of 0. They are ignored when calculating the likelihood.".format(err_evt))
                 if self.verbose:
                     print(tab)
                     print("\n")

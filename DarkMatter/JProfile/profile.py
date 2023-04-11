@@ -18,13 +18,15 @@ Msun = 1.1158518958483142e+57
 
 # Navarro-Frenk-White profile (Zhao, H., 1996)
 AlexDMProfile = lambda x, rhos, rs, alpha, beta, gamma: rhos*(x/rs)**(-gamma) * (1+(x/rs)**alpha)**((gamma-beta)/alpha)
-TruncationRadius = {"Segue_1":138.58, "Draco":1865.59, "Bootes_I":543.66, "UMi":1580.36}
+TruncationRadius = {"Segue_1":138.58, "Draco_II":1865.59, "Bootes_I":543.66, "UMi":1580.36}
 #Distance2Dwarf = {"segue_1":2.3e4, "draco":7.6e4, "bootes":6.6e4, "ursa_minor":7.6e4, "uma_ii":3.2e4}
 propsNames=["rhos", "log10(rs)", "alpha", "beta", "gamma"]
-goodNum = {"Segue_1": 295, "Draco": 38, "Bootes": 54, "UMi": 113}
+goodNum_NEW = {"Segue_1": 295, "Draco_II": 38, "Bootes_I": 54, "UMi": 113}
+
+
 prevPars = {
     "Segue_1": [1.77958937145, np.log10(310.75663656), 0.544110936127, 4.35536608401, 0.642320059857],    
-    "Draco": [0.00820912015408, np.log10(2563.36089842), 1.96440143647, 6.08744867073, 1.11688100724],
+    "Draco_II": [0.00820912015408, np.log10(2563.36089842), 1.96440143647, 6.08744867073, 1.11688100724],
     "Bootes_I": [0.000665784127071, np.log10(12105.0798317), 2.80901997094, 4.87104498245, 1.0804979449],
     "UMi": [0.560401316631, np.log10(355.432472672), 2.36557038861, 8.76508618936, 0.0117481249969],
 }

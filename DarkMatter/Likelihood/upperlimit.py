@@ -29,7 +29,7 @@ from ..ResponseFunction.eventdisplay import th2cut_ext
 def calcUpperLimits(dwarf, channel, package="EventDisplay", 
     irf=None, jProfile = None, jArray=True, version="all", th2Cut = 0, 
     addTheta=False, averagedIRF=True, method = 1, fix_b=False, 
-    filename = None, seed=0, jSeed = -1, overWrite=False,
+    filename = None, seed=0, jSeed = "median", overWrite=False,
     mass = np.logspace(2, 4.5, 20), 
     bkgModel=None, ext=False, statistic="unbinned",
     verbosity=True, 
@@ -76,14 +76,18 @@ def calcUpperLimits(dwarf, channel, package="EventDisplay",
             print("[Log] Dataset      : Point-like")
 
         print("[Log] Dimention    :", int(addTheta)+1)
+
         if bkgModel == "ex":
             print("[Log] Background   : Extrapolation (ex)")
         elif bkgModel == "sm":
             print("[Log] Background   : Smoothing (sm)")
         elif bkgModel == "alt":
             print("[Log] Background   : Alternative (alt)")
+        elif bkgModel == "gaus":
+            print("[Log] Background   : Gaussian (gaus)")
         else:
             print("[Log] Background   : None")
+            
         if useBias:
             print(r"[Log] Dispersion   : Etr vs ratio")
         else:
@@ -98,9 +102,11 @@ def calcUpperLimits(dwarf, channel, package="EventDisplay",
     ul = []
 
     if jArray:
-        if jSeed == -1 :
+        if jSeed == "median":
             jSeed = defaultNum[dwarf]
-            #jSeed = random.randrange(0, JProfile.goodPropNum(dwarf)-1)
+        elif jSeed == -1:
+            jSeed = random.randrange(0, 100000)
+
 
         if verbosity>1:
             print("[Log] Importing the J profile (seed: {}).".format(jSeed))
@@ -122,7 +128,7 @@ def calcUpperLimits(dwarf, channel, package="EventDisplay",
                 tau = [1]
                 irf = importedIRF
                 if jArray:
-                    jProfile = JProfile.generateConvolvedJ(dwarf, package, return_array=True, seed = jSeed, verbose=False, save_root=False, ext=ext, th2Cut=th2Cut, **kwargs)
+                    jProfile = JProfile.generateConvolvedJ(dwarf, package, return_array=True, seed = jSeed, verbose=False, ext=ext, th2Cut=th2Cut, **kwargs)
             else:
                 importedIRF = {}
                 tau = []
@@ -136,7 +142,7 @@ def calcUpperLimits(dwarf, channel, package="EventDisplay",
                     if err:
                         importedIRF[v] = ResponseFunction.EventDisplay.averagedIRFs(dwarf, version=v, export=False, verbose=(verbosity>1), ext=ext)
                     if jArray:
-                        importedJProfile[v] = JProfile.generateConvolvedJ(dwarf, package, irf = importedIRF[v], return_array=True, seed = jSeed, verbose=False, version=v, save_root=False, ext=ext, th2Cut=th2Cut, **kwargs)
+                        importedJProfile[v] = JProfile.generateConvolvedJ(dwarf, package, irf = importedIRF[v], return_array=True, seed = jSeed, verbose=False, version=v, ext=ext, th2Cut=th2Cut, **kwargs)
                     tau.append(importedIRF[v].exposure)
                 tau = np.asarray(tau)/sum(tau)
                 irf = importedIRF
@@ -148,10 +154,10 @@ def calcUpperLimits(dwarf, channel, package="EventDisplay",
             except:
                 importedIRF = ResponseFunction.VEGAS(dwarf, verbose=(verbosity>1))
             
-            jProfile = JProfile.generateConvolvedJ(dwarf, package, irf = importedIRF, return_array=True, seed = jSeed, verbose=False, save_root=False, **kwargs)
+            jProfile = JProfile.generateConvolvedJ(dwarf, package, irf = importedIRF, return_array=True, seed = jSeed, verbose=False,  **kwargs)
     else:
         importedIRF=irf
-        jProfile = JProfile.generateConvolvedJ(dwarf, package, irf = importedIRF, version=version, return_array=True, seed = jSeed, verbose=False, save_root=False, th2Cut=th2Cut, ext=ext)
+        jProfile = JProfile.generateConvolvedJ(dwarf, package, irf = importedIRF, version=version, return_array=True, seed = jSeed, verbose=False,  th2Cut=th2Cut, ext=ext)
     
 
     if verbosity>1:
@@ -335,7 +341,7 @@ def calcExpectedLimits(dwarf, channel, package="EventDisplay",
         if jArray and jSeed == -1:
             jSeed = random.randrange(0, JProfile.goodPropNum(dwarf)-1)
 
-        jProfile = JProfile.generateConvolvedJ(dwarf, package, irf=importedIRF, version=version, return_array=True, seed = jSeed, verbose=False, save_root=False, th2Cut=th2Cut, ext=ext)
+        jProfile = JProfile.generateConvolvedJ(dwarf, package, irf=importedIRF, version=version, return_array=True, seed = jSeed, verbose=False,  th2Cut=th2Cut, ext=ext)
     
     hSignal = {}
     for i, M in enumerate(mass):
@@ -367,6 +373,8 @@ def calcExpectedLimits(dwarf, channel, package="EventDisplay",
 
     for j in range(runs):
         N_on_poi = np.random.poisson(N_on)
+        if N_on_poi == 0:
+            N_on_poi = 1
         selected = np.random.choice(range(len(bkg)), size=N_on_poi)
 
         events = bkg[selected]
@@ -374,7 +382,7 @@ def calcExpectedLimits(dwarf, channel, package="EventDisplay",
         processes = []
         
         if package=="EventDisplay":
-            hOn, etc = eventdisplay.readData(dwarf, events=events)
+            hOn, etc = eventdisplay.readData(dwarf, events=events, ext=ext, version=version)
         elif package=="VEGAS":
             hOn, etc = vegas.readData(dwarf, events=events)
         else:
@@ -469,14 +477,18 @@ def calcULSysError(dwarf, channel, package="EventDisplay",
         print("[Log] Dwarf        :", dwarf)
         print("[Log] Channel      :", channel)
         print("[Log] Dimention    :", int(addTheta)+1)
+        
         if bkgModel == "ex":
             print("[Log] Background   : Extrapolation (ex)")
         elif bkgModel == "sm":
             print("[Log] Background   : Smoothing (sm)")
         elif bkgModel == "alt":
             print("[Log] Background   : Alternative (alt)")
+        elif bkgModel == "gaus":
+            print("[Log] Background   : Gaussian (gaus)")
         else:
             print("[Log] Background   : None")
+            
         if useBias:
             print(r"[Log] Dispersion   : Etr vs ratio")
         else:
@@ -549,13 +561,13 @@ def calcULSysError(dwarf, channel, package="EventDisplay",
 
         processes = []
         output = manager.dict()
-        jSeed = random.randrange(0, JProfile.goodPropNum(dwarf)-1)
+        jSeed = random.randrange(0, 100000)
         jProfile = JProfile.generateConvolvedJ(dwarf, package, irf=importedIRF, version=version, return_array=True, seed = jSeed, verbose=False, ext=ext)
         jSeeds.append(jSeed)
 
         for i, M in enumerate(mass):
             mle_kwargs = {"channel":channel, "irf":importedIRF, "jProfile":jProfile, "jArray":jArray,
-                    "th2Cut":th2Cut, "addTheta":addTheta, "expectedLimit":True, "jSeed": jSeed,
+                    "th2Cut":th2Cut, "addTheta":addTheta, "expectedLimit":False, "jSeed": jSeed,
                     "averagedIRF":averagedIRF, "tau":tau, "version":version, 
                     "seed":seed, "pN": i, "ext":ext, 
                     "bkgModel":bkgModel, 

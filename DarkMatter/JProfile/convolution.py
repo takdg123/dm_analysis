@@ -20,8 +20,26 @@ from scipy.interpolate import InterpolatedUnivariateSpline
 
 from ..ResponseFunction.eventdisplay import th2cut_ext
 
-def generateConvolvedJ(dwarf, package="EventDisplay", filename = None, irf=None, gJProf=None, th2Cut=0, version="all", seed = -1, return_array=False, save_root = True, ext=False, step=0.004, verbose=True, **kwargs):
+from ..const import defaultNum
+
+def generateConvolvedJ(dwarf, package="EventDisplay", filename = None, irf=None, gJProf=None, th2Cut=0, version="all", seed = -1, return_array=False, save_array=False, ext=False, step=0.004, verbose=True, **kwargs):
     
+    if kwargs.pop("allow_load", False):
+        if seed == defaultNum[dwarf]:
+            if ext:
+                filename = const.OUTPUT_DIR+"/JProfile_{}_{}_ext".format(package, dwarf)
+            else:
+                filename = const.OUTPUT_DIR+"/JProfile_{}_{}".format(package, dwarf)
+            
+            try:
+                convJ1D_array = np.load(filename+"_1D.npy")
+                convJ2D_array = np.load(filename+"_2D.npy", allow_pickle=True).item()
+
+                return (convJ1D_array, convJ2D_array)
+            except:
+                save_array=True
+                pass
+
     # Read IRFs
     if irf is not None:
         if hasattr(irf, "package"):
@@ -67,18 +85,18 @@ def generateConvolvedJ(dwarf, package="EventDisplay", filename = None, irf=None,
     else:
         thCut = defineThetaCut(package, th2Cut)
 
-    # Make ROOT stuffs
-    if save_root:
-        convJ1D = TGraph()
-        convJ2D = TGraph2D()
+    # # Make ROOT stuffs
+    # if save_root:
+    #     convJ1D = TGraph()
+    #     convJ2D = TGraph2D()
 
-        convJ1D.SetTitle("Convolved J profile (seed: {})".format(seed))
-        convJ1D.GetHistogram().GetXaxis().SetTitle("Energy [GeV]");
-        convJ1D.GetHistogram().GetYaxis().SetTitle(r"J (#theta^{{2}} < {:.3f}) [GeV^{{2}} cm^{{-5}}]".format(thCut**2.));
+    #     convJ1D.SetTitle("Convolved J profile (seed: {})".format(seed))
+    #     convJ1D.GetHistogram().GetXaxis().SetTitle("Energy [GeV]");
+    #     convJ1D.GetHistogram().GetYaxis().SetTitle(r"J (#theta^{{2}} < {:.3f}) [GeV^{{2}} cm^{{-5}}]".format(thCut**2.));
 
-        convJ2D.SetTitle("Convolved 2D J profile (seed: {})".format(seed))
-        convJ2D.GetHistogram().GetXaxis().SetTitle("Energy [GeV]")
-        convJ2D.GetHistogram().GetYaxis().SetTitle("Theta [Deg]")
+    #     convJ2D.SetTitle("Convolved 2D J profile (seed: {})".format(seed))
+    #     convJ2D.GetHistogram().GetXaxis().SetTitle("Energy [GeV]")
+    #     convJ2D.GetHistogram().GetYaxis().SetTitle("Theta [Deg]")
 
     
     convJ1D_array = []
@@ -97,50 +115,33 @@ def generateConvolvedJ(dwarf, package="EventDisplay", filename = None, irf=None,
         
         convJ2D_array[en] = J2D[J2D[:,0]<=(thCut+th_width)]
 
-        if save_root:
-            convJ1D.SetPoint(m, en, J)
-            m+=1
+        # if save_root:
+        #     convJ1D.SetPoint(m, en, J)
+        #     m+=1
 
-            for j2d in J2D:
-                if j2d[0]<= thCut:
-                    convJ2D.SetPoint(n, round(np.log10(en), 1), j2d[0], j2d[1])
-                    n+=1
-                else:
-                    convJ2D.SetPoint(n, round(np.log10(en), 1), j2d[0], j2d[1])
-                    n+=1
-                    break
+        #     for j2d in J2D:
+        #         if j2d[0]<= thCut:
+        #             convJ2D.SetPoint(n, round(np.log10(en), 1), j2d[0], j2d[1])
+        #             n+=1
+        #         else:
+        #             convJ2D.SetPoint(n, round(np.log10(en), 1), j2d[0], j2d[1])
+        #             n+=1
+        #             break
 
     convJ1D_array = np.asarray(convJ1D_array)
 
-    if save_root:
-        if filename == None:
-            if not(os.path.isdir(const.OUTPUT_DIR)):
-                os.system("mkdir "+const.OUTPUT_DIR)
-            
-            if ext:
-                filename = const.OUTPUT_DIR+"/JProfile_{}_{}_ext.root".format(package, dwarf)
-            else:
-                filename = const.OUTPUT_DIR+"/JProfile_{}_{}.root".format(package, dwarf)
-
-        OutFile = TFile(filename,"RECREATE");
-
-        if version == "all":
-            OutFile.cd()
-            convJ1D.Write("gConvJ1D")
-            convJ2D.Write("gConvJ2D") 
+    if save_array:
+        if ext:
+            filename = const.OUTPUT_DIR+"/JProfile_{}_{}_ext".format(package, dwarf)
         else:
-            OutFile.cd()
-            convJ1D.Write("gConvJ1D_{}".format(version))
-            convJ2D.Write("gConvJ2D_{}".format(version)) 
-        OutFile.Close()
+            filename = const.OUTPUT_DIR+"/JProfile_{}_{}".format(package, dwarf)
 
-        if verbose:
-            try:
-                clear_output()
-            except:
-                pass
-            print("[Log] Finish. J profile is saved in {}.".format(filename))
-     
+        np.save(filename+"_1D", convJ1D_array)
+        np.save(filename+"_2D", convJ2D_array)
+        if verbose: 
+            print("[Log] Finish. J profile is saved in {}_XD.npy.".format(filename))
+
+  
     if return_array:
         return (convJ1D_array, convJ2D_array)
 

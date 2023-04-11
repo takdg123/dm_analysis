@@ -88,7 +88,7 @@ def calcSignal(dwarf, M, irf, package="EventDisplay", DM_spectra="PPPC",
                     jSeed = random.randrange(0, JProfile.goodPropNum(dwarf)-1)
                 if verbose:
                     print("[Log] Importing the J profile (seed: {}).".format(jSeed))
-                (J1, J2) = JProfile.generateConvolvedJ(dwarf, package, irf=irf, version=version, return_array=True, seed = jSeed, verbose=False, save_root=True, th2Cut=th2Cut, ext=ext, **kwargs)
+                (J1, J2) = JProfile.generateConvolvedJ(dwarf, package, irf=irf, version=version, return_array=True, seed = jSeed, verbose=False, th2Cut=th2Cut, ext=ext, **kwargs)
             else:
                 (J1, J2) = jProfile
 
@@ -349,6 +349,7 @@ def calcSignal(dwarf, M, irf, package="EventDisplay", DM_spectra="PPPC",
                 else:
 
                     j_E = jProfile_1d(Etr)
+                    
                 
                 # Multiply all (dN/dE' J(E') A(E') D(E|E') dE')
                 if j_E > 0 and not(np.isnan(j_E)):  

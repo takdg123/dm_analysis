@@ -54,7 +54,7 @@ def simplefcn(npar, gin, f, par, iflag):
     g = sum(args["g"])*10**signu
     logl = args["N_off"]*np.log(b) - g - (args["alpha"]+1)*b + args["N_on"]*np.log(g+args["alpha"]*b)
     f.value = -logl
-
+    
 
 def binnedfcn(npar, gin, f, par, iflag):
     log = 0
@@ -88,6 +88,7 @@ def stackedfcn(npar, gin, f, par, iflag):
     signu = par[0]
     numDwarfs = int(par[1])
     
+
     for i in range(numDwarfs):
         b = int(par[i+2])
         seed = int(par[numDwarfs+2+i])

@@ -32,10 +32,7 @@ def combinedUpperLimits(channel, package="EventDisplay", dwarfs = ["Segue_1", "U
     mass = np.logspace(2, 4.5, 15), bkgModel=None, verbosity=True, 
     returnTS = False, **kwargs):
     
-    if ext and (th2Cut == 0):
-        th2Cut = defineTheta2Cut(package, th2cut_ext(dwarf=dwarf, ext=ext))
-    else:
-        th2Cut = defineTheta2Cut(package, th2Cut)
+
     useBias = kwargs.get("useBias", True)
 
     if verbosity:
@@ -47,14 +44,18 @@ def combinedUpperLimits(channel, package="EventDisplay", dwarfs = ["Segue_1", "U
             print("[Log] # of Dwarfs  :", len(dwarfs))
         print("[Log] Channel      :", channel)
         print("[Log] Dimention    :", int(addTheta)+1)
+        
         if bkgModel == "ex":
             print("[Log] Background   : Extrapolation (ex)")
         elif bkgModel == "sm":
             print("[Log] Background   : Smoothing (sm)")
         elif bkgModel == "alt":
             print("[Log] Background   : Alternative (alt)")
+        elif bkgModel == "gaus":
+            print("[Log] Background   : Gaussian (gaus)")
         else:
             print("[Log] Background   : None")
+
         if useBias:
             print(r"[Log] Dispersion   : Etr vs ratio")
         else:
@@ -95,9 +96,17 @@ def combinedUpperLimits(channel, package="EventDisplay", dwarfs = ["Segue_1", "U
     
     for dwarf in dwarfs:
         if jSeed == "median":
-            jSeed = defaultNum[dwarf]
+            jS = defaultNum[dwarf]
+            allow_load=True
+            save_array=True
         elif jSeed == "random" or sys:
-            jSeed = -1
+            jS = -1
+            allow_load=False
+            save_array=False
+        else:
+            jS = jSeed
+            allow_load=False
+            save_array=False
 
         if package == "EventDisplay":
             if singleIRF:
@@ -108,11 +117,11 @@ def combinedUpperLimits(channel, package="EventDisplay", dwarfs = ["Segue_1", "U
                     err = True
                     
                 if err:
-                    importedIRF = ResponseFunction.EventDisplay.averagedIRFs(dwarf, version=version, export=False, verbose=(verbosity>1), ext=ext)
+                    importedIRF = ResponseFunction.EventDisplay.averagedIRFs(dwarf, version=version, export=True, verbose=(verbosity>1), ext=ext)
 
                 tau[dwarf] = [1]
                 irf[dwarf] = importedIRF
-                jProfile[dwarf] = JProfile.generateConvolvedJ(dwarf, package, return_array=True, seed = jSeed, verbose=False, save_root=False, ext=ext, **kwargs)
+                jProfile[dwarf] = JProfile.generateConvolvedJ(dwarf, package, return_array=True, seed = jS, allow_load=allow_load, verbose=False, ext=ext, save_array=save_array, **kwargs)
             else:
                 importedIRF = {}
                 tau[dwarf] = []
@@ -125,7 +134,7 @@ def combinedUpperLimits(channel, package="EventDisplay", dwarfs = ["Segue_1", "U
                         err = True    
                     if err:
                         importedIRF[v] = ResponseFunction.EventDisplay.averagedIRFs(dwarf, version=v, export=False, verbose=(verbosity>1), ext=ext)
-                    importedJProfile[v] = JProfile.generateConvolvedJ(dwarf, package, irf = importedIRF[v], return_array=True, seed = jSeed, verbose=False, version=v, save_root=False, ext=ext, **kwargs)
+                    importedJProfile[v] = JProfile.generateConvolvedJ(dwarf, package, irf = importedIRF[v], return_array=True, seed = jS, verbose=False, version=v, ext=ext, **kwargs)
                     tau[dwarf].append(importedIRF[v].exposure)
                 tau[dwarf] = np.asarray(tau[dwarf])/sum(tau[dwarf])
                 irf[dwarf] = importedIRF
@@ -137,7 +146,7 @@ def combinedUpperLimits(channel, package="EventDisplay", dwarfs = ["Segue_1", "U
                 irf[dwarf] = ResponseFunction.VEGAS(dwarf, verbose=False)
 
             raw_events = vegas.readData(dwarf, rawdata=True)
-            jProfile[dwarf] = JProfile.generateConvolvedJ(dwarf, package, irf = irf[dwarf], eLowerCut=min(raw_events[:,0]), return_array=True, seed = jSeed, verbose=False, save_root=False, **kwargs)
+            jProfile[dwarf] = JProfile.generateConvolvedJ(dwarf, package, irf = irf[dwarf], eLowerCut=min(raw_events[:,0]), return_array=True, seed = jS, verbose=False, **kwargs)
             tau[dwarf] = [1]
 
     if verbosity>1:
@@ -152,6 +161,12 @@ def combinedUpperLimits(channel, package="EventDisplay", dwarfs = ["Segue_1", "U
     for i, M in tqdm(enumerate(mass), total=len(mass)) if verbosity else enumerate(mass):
         stackedMLE = {}
         for i, dwarf in enumerate(dwarfs):
+
+            if ext and (th2Cut == 0):
+                th2Cut = defineTheta2Cut(package, th2cut_ext(dwarf=dwarf, ext=ext))
+            else:
+                th2Cut = defineTheta2Cut(package, th2Cut)
+
             mle = MLE(dwarf, M, package, channel=channel, irf=irf[dwarf], jProfile=jProfile[dwarf], jArray=True,
                     th2Cut=th2Cut, addTheta=addTheta, ext=ext,
                     averagedIRF=averagedIRF, version=version, tau=tau[dwarf],
@@ -160,7 +175,7 @@ def combinedUpperLimits(channel, package="EventDisplay", dwarfs = ["Segue_1", "U
                     verbose=(True if verbosity>2 else False), **kwargs) 
             stackedMLE[dwarf] = mle
         
-        
+    
         ul_i, ts_i = combinedMinuit(stackedMLE, signu0 = mle.signu0, channel=channel, verbose=max(verbosity-1, 0))
         
         
@@ -208,16 +223,14 @@ def combinedUpperLimits(channel, package="EventDisplay", dwarfs = ["Segue_1", "U
         if verbosity:
             print("[Log] Upper limits are saved in '{}.npy'".format(OUTPUT_DIR+filename))
 
-def combinedExpectedUpperLimits(channel, runs=300, package="EventDisplay", dwarfs = ["segue_1", "ursa_minor", "draco", "bootes"],
+def combinedExpectedUpperLimits(channel, runs=300, package="EventDisplay", 
+    dwarfs = ["segue_1", "ursa_minor", "draco", "bootes"],
     addTheta=False, averagedIRF=True, method = 1, version="all", jSeed = "median", 
     filename = None, seed=0, overWrite=False, th2Cut=0, ext=False, sys=False,
     mass = np.logspace(2, 4.5, 15), bkgModel=None, verbosity=True, 
     returnTS = False, **kwargs):
     
-    if ext and (th2Cut == 0):
-        th2Cut = defineTheta2Cut(package, th2cut_ext(dwarf=dwarf, ext=ext))
-    else:
-        th2Cut = defineTheta2Cut(package, th2Cut)
+
     useBias = kwargs.get("useBias", True)
 
     if verbosity:
@@ -229,14 +242,18 @@ def combinedExpectedUpperLimits(channel, runs=300, package="EventDisplay", dwarf
             print("[Log] # of Dwarfs  :", len(dwarfs))
         print("[Log] Channel      :", channel)
         print("[Log] Dimention    :", int(addTheta)+1)
+        
         if bkgModel == "ex":
             print("[Log] Background   : Extrapolation (ex)")
         elif bkgModel == "sm":
             print("[Log] Background   : Smoothing (sm)")
         elif bkgModel == "alt":
             print("[Log] Background   : Alternative (alt)")
+        elif bkgModel == "gaus":
+            print("[Log] Background   : Gaussian (gaus)")
         else:
             print("[Log] Background   : None")
+            
         if useBias:
             print(r"[Log] Dispersion   : Etr vs ratio")
         else:
@@ -274,10 +291,16 @@ def combinedExpectedUpperLimits(channel, runs=300, package="EventDisplay", dwarf
     jProfile = {}
     singleIRF = averagedIRF
 
-    
+    if verbosity>1:
+        print("[Log] Computing the J profile and reading IRFs ...       ")
+
     for dwarf in dwarfs:
         if jSeed == "median":
-            jSeed = defaultNum[dwarf]
+            jS = defaultNum[dwarf]
+            allow_load=True
+        else:
+            jS = jSeed
+            allow_load=False
 
         if package == "EventDisplay":
             if singleIRF:
@@ -292,7 +315,7 @@ def combinedExpectedUpperLimits(channel, runs=300, package="EventDisplay", dwarf
 
                 tau[dwarf] = [1]
                 irf[dwarf] = importedIRF
-                jProfile[dwarf] = JProfile.generateConvolvedJ(dwarf, package, return_array=True, seed = jSeed, verbose=False, save_root=False, ext=ext, **kwargs)
+                jProfile[dwarf] = JProfile.generateConvolvedJ(dwarf, package, return_array=True, seed = jS, verbose=False, ext=ext, allow_load=allow_load, **kwargs)
             else:
                 importedIRF = {}
                 tau[dwarf] = []
@@ -305,7 +328,7 @@ def combinedExpectedUpperLimits(channel, runs=300, package="EventDisplay", dwarf
                         err = True    
                     if err:
                         importedIRF[v] = ResponseFunction.EventDisplay.averagedIRFs(dwarf, version=v, export=False, verbose=(verbosity>1), ext=ext)
-                    importedJProfile[v] = JProfile.generateConvolvedJ(dwarf, package, irf = importedIRF[v], return_array=True, seed = jSeed, verbose=False, version=v, save_root=False, ext=ext, **kwargs)
+                    importedJProfile[v] = JProfile.generateConvolvedJ(dwarf, package, irf = importedIRF[v], return_array=True, seed = jS, verbose=False, version=v,  ext=ext, **kwargs)
                     tau[dwarf].append(importedIRF[v].exposure)
                 tau[dwarf] = np.asarray(tau[dwarf])/sum(tau[dwarf])
                 irf[dwarf] = importedIRF
@@ -316,8 +339,9 @@ def combinedExpectedUpperLimits(channel, runs=300, package="EventDisplay", dwarf
             except:
                 irf[dwarf] = ResponseFunction.VEGAS(dwarf, verbose=False)
             raw_events = vegas.readData(dwarf, rawdata=True)
-            jProfile[dwarf] = JProfile.generateConvolvedJ(dwarf, package, irf = irf[dwarf], eLowerCut= min(raw_events[:,0]), return_array=True, seed = jSeed, verbose=False, save_root=False, **kwargs)
+            jProfile[dwarf] = JProfile.generateConvolvedJ(dwarf, package, irf = irf[dwarf], eLowerCut= min(raw_events[:,0]), return_array=True, seed = jS, verbose=False,  **kwargs)
             tau[dwarf] = [1]
+
 
     if verbosity>1:
         print("[Log] Initialization (Done)                      ")
@@ -327,25 +351,40 @@ def combinedExpectedUpperLimits(channel, runs=300, package="EventDisplay", dwarf
     
     hSignal = {}
     for dwarf in dwarfs:
+        if ext and (th2Cut == 0):
+            th2Cut = defineTheta2Cut(package, th2cut_ext(dwarf=dwarf, ext=ext))
+        else:
+            th2Cut = defineTheta2Cut(package, th2Cut)
         hSignal[dwarf] = {}
+        if package == "EventDisplay":
+            raw_events = eventdisplay.readData(dwarf, rawdata=True, ext=ext)
+        else:
+            raw_events = vegas.readData(dwarf, rawdata=True)
         for i, M in enumerate(mass):
             if singleIRF:
-                hSignal[dwarf][M] = calcSignal(dwarf, M, irf[dwarf], package, jProfile=jProfile[dwarf], channel=channel, addTheta=addTheta, th2Cut=th2Cut, version=version, verbose=False, ext=ext, DM_spectra=DM_spectra)
+                hSignal[dwarf][M] = calcSignal(dwarf, M, irf[dwarf], package, jProfile=jProfile[dwarf], channel=channel, addTheta=addTheta, th2Cut=th2Cut, version=version, verbose=False, ext=ext, eLowerCut=min(raw_events[:,0]), DM_spectra=DM_spectra)
                 hSignal[dwarf][M].SetDirectory(0)
             else:
                 hSignal[dwarf][M] = {}
                 for v in listOfVersions(dwarf):
-                    hSignal[dwarf][M][v] = calcSignal(dwarf, M, irf[dwarf][v], package, jProfile=jProfile[dwarf][v], channel=channel, addTheta=addTheta, th2Cut=th2Cut, version=version, verbose=False, ext=ext, DM_spectra=DM_spectra)
+                    hSignal[dwarf][M][v] = calcSignal(dwarf, M, irf[dwarf][v], package, jProfile=jProfile[dwarf][v], channel=channel, addTheta=addTheta, th2Cut=th2Cut, version=version, verbose=False, ext=ext, eLowerCut=min(raw_events[:,0]), DM_spectra=DM_spectra)
                     hSignal[dwarf][M][v].SetDirectory(0)
 
     ul = {}
     ts = {}
-    for i, M in tqdm(enumerate(mass), total=len(mass)):
+    pbar = tqdm(total=len(mass)*runs)
+
+    for i, M in enumerate(mass):
         ul[M] = []
         ts[M] = []
         for r in range(runs):
             stackedMLE = {}
             for i, dwarf in enumerate(dwarfs):
+
+                if ext and (th2Cut == 0):
+                    th2Cut = defineTheta2Cut(package, th2cut_ext(dwarf=dwarf, ext=ext))
+                else:
+                    th2Cut = defineTheta2Cut(package, th2Cut)
 
                 if package=="EventDisplay":
                     raw_events = eventdisplay.readData(dwarf, rawdata=True, ext=ext, version=version)
@@ -359,6 +398,8 @@ def combinedExpectedUpperLimits(channel, runs=300, package="EventDisplay", dwarf
                 N_on = len(bkg)*alpha
                 
                 N_on_poi = np.random.poisson(N_on)
+                if N_on_poi == 0:
+                    N_on_poi = 1
                 selected = np.random.choice(range(len(bkg)), size=N_on_poi)
 
                 events = bkg[selected]
@@ -376,7 +417,7 @@ def combinedExpectedUpperLimits(channel, runs=300, package="EventDisplay", dwarf
                 mle = MLE(dwarf, M, package, channel=channel, irf=irf[dwarf], jProfile=jProfile[dwarf], jArray=True,
                         th2Cut=th2Cut, addTheta=addTheta, ext=ext,
                         averagedIRF=averagedIRF, version=version, tau=tau[dwarf],
-                        seed=i+5,  
+                        seed=i+20,  
                         bkgModel=bkgModel, 
                         N_on=N_on_poi, expectedLimit=True,
                         events = events, hSignal=hSignal[dwarf][M], hOn = hOn,
@@ -394,6 +435,8 @@ def combinedExpectedUpperLimits(channel, runs=300, package="EventDisplay", dwarf
                     if verbosity>1:
                         print("[Warning] TS value is higher than 25 (M={:.3f} TeV).".format(M/1000))
                     continue
+            pbar.update(1)
+
         
     if verbosity>1:
         print("[Log] Expected upper-limit calculation (Done)                                           ")
@@ -451,14 +494,18 @@ def combinedStatisticUpperLimits(channel, runs=300, package="EventDisplay", dwar
             print("[Log] # of Dwarfs  :", len(dwarfs))
         print("[Log] Channel      :", channel)
         print("[Log] Dimention    :", int(addTheta)+1)
+
         if bkgModel == "ex":
             print("[Log] Background   : Extrapolation (ex)")
         elif bkgModel == "sm":
             print("[Log] Background   : Smoothing (sm)")
         elif bkgModel == "alt":
             print("[Log] Background   : Alternative (alt)")
+        elif bkgModel == "gaus":
+            print("[Log] Background   : Gaussian (gaus)")
         else:
             print("[Log] Background   : None")
+            
         if useBias:
             print(r"[Log] Dispersion   : Etr vs ratio")
         else:
@@ -499,7 +546,9 @@ def combinedStatisticUpperLimits(channel, runs=300, package="EventDisplay", dwar
     
     for dwarf in dwarfs:
         if jSeed == "median":
-            jSeed = defaultNum[dwarf]
+            jS = defaultNum[dwarf]
+        else:
+            jS = jSeed
 
         if package == "EventDisplay":
             if singleIRF:
@@ -514,7 +563,7 @@ def combinedStatisticUpperLimits(channel, runs=300, package="EventDisplay", dwar
 
                 tau[dwarf] = [1]
                 irf[dwarf] = importedIRF
-                jProfile[dwarf] = JProfile.generateConvolvedJ(dwarf, package, return_array=True, seed = jSeed, verbose=False, save_root=False, ext=ext, **kwargs)
+                jProfile[dwarf] = JProfile.generateConvolvedJ(dwarf, package, return_array=True, seed = jS, verbose=False, ext=ext, **kwargs)
             else:
                 importedIRF = {}
                 tau[dwarf] = []
@@ -527,7 +576,7 @@ def combinedStatisticUpperLimits(channel, runs=300, package="EventDisplay", dwar
                         err = True    
                     if err:
                         importedIRF[v] = ResponseFunction.EventDisplay.averagedIRFs(dwarf, version=v, export=False, verbose=(verbosity>1), ext=ext)
-                    importedJProfile[v] = JProfile.generateConvolvedJ(dwarf, package, irf = importedIRF[v], return_array=True, seed = jSeed, verbose=False, version=v, save_root=False, ext=ext, **kwargs)
+                    importedJProfile[v] = JProfile.generateConvolvedJ(dwarf, package, irf = importedIRF[v], return_array=True, seed = jS, verbose=False, version=v, ext=ext, **kwargs)
                     tau[dwarf].append(importedIRF[v].exposure)
                 tau[dwarf] = np.asarray(tau[dwarf])/sum(tau[dwarf])
                 irf[dwarf] = importedIRF
@@ -538,7 +587,7 @@ def combinedStatisticUpperLimits(channel, runs=300, package="EventDisplay", dwar
             except:
                 irf[dwarf] = ResponseFunction.VEGAS(dwarf, verbose=False)
             raw_events = vegas.readData(dwarf, rawdata=True)
-            jProfile[dwarf] = JProfile.generateConvolvedJ(dwarf, package, irf = irf[dwarf], eLowerCut= min(raw_events[:,0]), return_array=True, seed = jSeed, verbose=False, save_root=False, **kwargs)
+            jProfile[dwarf] = JProfile.generateConvolvedJ(dwarf, package, irf = irf[dwarf], eLowerCut= min(raw_events[:,0]), return_array=True, seed = jS, verbose=False, **kwargs)
             tau[dwarf] = [1]
 
     if verbosity>1:
@@ -546,6 +595,7 @@ def combinedStatisticUpperLimits(channel, runs=300, package="EventDisplay", dwar
 
     if verbosity>1:
         print("[Log] Start upper-limit calculation")
+    
     
     hSignal = {}
     for dwarf in dwarfs:
@@ -575,14 +625,12 @@ def combinedStatisticUpperLimits(channel, runs=300, package="EventDisplay", dwar
                     raw_events = vegas.readData(dwarf, rawdata=True)
                 else:
                     return
-                
-                
+                                
                 N_on = sum(raw_events[:,2]==1.0)
                 N_on_poi = np.random.poisson(N_on)
 
                 hOn, etc = vegas.readData(dwarf)
                 events = np.asarray([[hOn.GetRandom(), 0, 1, 1] for i in range(N_on_poi)])
-
 
                 if package=="EventDisplay":
                     hOn, etc = eventdisplay.readData(dwarf, events=events)
@@ -590,8 +638,6 @@ def combinedStatisticUpperLimits(channel, runs=300, package="EventDisplay", dwar
                     hOn, etc = vegas.readData(dwarf, events=events)
                 else:
                     hOn = None
-
-                print(N_on, N_on_poi)
 
                 mle = MLE(dwarf, M, package, channel=channel, irf=irf[dwarf], jProfile=jProfile[dwarf], jArray=True,
                         th2Cut=th2Cut, addTheta=addTheta, ext=ext,
@@ -648,7 +694,7 @@ def combinedStatisticUpperLimits(channel, runs=300, package="EventDisplay", dwar
         print("[Log] Upper limits are saved in '{}.npy'".format(OUTPUT_DIR+filename))
 
 
-def combinedMinuit(stackedMLE, channel = "tt", seed = 10, signu0 = -23,  verbose=False):
+def combinedMinuit(stackedMLE, channel = "tt", seed = 10, signu0 = -23, verbose=False):
 
 
     if verbose == 2:
@@ -669,7 +715,7 @@ def combinedMinuit(stackedMLE, channel = "tt", seed = 10, signu0 = -23,  verbose
     
     ierflg = ctypes.c_int(199)
     istat = ctypes.c_int(12)
-    fit.mnparm(0,"signu", 1,     0.01,    -15,     5,  ierflg)
+    fit.mnparm(0,"signu", 1,     0.01,    -20,     5,  ierflg)
     fit.mnparm(1,"num", len(stackedMLE),   0,   len(stackedMLE),   len(stackedMLE),  ierflg)
     fit.FixParameter(1)
 
@@ -685,6 +731,7 @@ def combinedMinuit(stackedMLE, channel = "tt", seed = 10, signu0 = -23,  verbose
         mle = stackedMLE[dwarf]   
         fit.mnparm(len(stackedMLE)+2+j,"pn_{}".format(mle.dwarf), mle._pn,   0,   mle._pn,   mle._pn,  ierflg)
         fit.FixParameter(len(stackedMLE)+2+j)
+
 
     arglist = array( 'd', 10*[0.] )
     arglist[0] = 10000
@@ -711,10 +758,10 @@ def combinedMinuit(stackedMLE, channel = "tt", seed = 10, signu0 = -23,  verbose
             print("[Log] MINUIT finds a minimum successfully (MIGRAD is converged).")
 
     elif ierflg.value == 4:
-        for i in range(5):
+        for i in range(20):
             if verbose:
                 print("[Warning] MIGRAD is NOT converged. Try again (trials: {}).".format(i+1), end="\r")
-            fit.mnparm(0,"signu", (np.random.rand(1)[0]-0.5)*2,     0.1,    -20,     3,  ierflg)
+            fit.mnparm(0,"signu", (np.random.rand(1)[0]-0.5)*2,     0.1,    -20,     10,  ierflg)
             fit.mnexcm("MIGRAD", arglist, 2, ierflg);
             
             if ierflg.value == 0:
@@ -722,7 +769,7 @@ def combinedMinuit(stackedMLE, channel = "tt", seed = 10, signu0 = -23,  verbose
         
         if ierflg.value == 4:
             print("[Error] MIGRAD is NOT converged. Check initial parameters (minuit in mle.py).")
-            
+            return np.nan, -1
         else:
             if verbose:
                 print("[Log] MINUIT finds a minimum successfully (MIGRAD is converged).")
@@ -733,7 +780,7 @@ def combinedMinuit(stackedMLE, channel = "tt", seed = 10, signu0 = -23,  verbose
     try:
         fit.mnimpr()
     except:
-        return -1, -1
+        return np.nan, -1
     
     logl, edm, errdef = map(ctypes.c_double, (0.18, 0.19, 0.20))
     nvpar, nparx, icstat = map(ctypes.c_int, (1983, 1984, 1985))
@@ -768,9 +815,9 @@ def combinedMinuit(stackedMLE, channel = "tt", seed = 10, signu0 = -23,  verbose
         fit.mnparm(2+i,"b_{}".format(dwarf), float(b_min.value),     0.01,  float(b_min.value)-3*float(b_err.value),    float(b_min.value)+3*float(b_err.value),  ierflg)
 
     if channel != "delta":
-        fit.mnparm(0,"signu", sig_min,     0.01,    sig_min-5,     sig_min+10,  ierflg)
+        fit.mnparm(0,"signu", sig_min,     0.01,    sig_min-5,     sig_min+7,  ierflg)
     else:
-        fit.mnparm(0,"signu", -3,     0.01,    -5,    5,  ierflg)
+        fit.mnparm(0,"signu", -3,     0.01,    -20,    10,  ierflg)
 
     fit.mncomd("scan 1 100",istat)
     
@@ -779,12 +826,26 @@ def combinedMinuit(stackedMLE, channel = "tt", seed = 10, signu0 = -23,  verbose
     x_signu, y_signu = getArray(gLSignu)
     
     gL = np.asarray([[x+signu0, y-stacked_logl] for x, y in zip(x_signu, y_signu)])
-    
-    logl = interp1d(gL[:,1], gL[:,0], kind='linear')
+    aboveMax = (y_signu>min(y_signu))
+    st_idx = list(aboveMax).index(False)
+
+    logl = interp1d(gL[:,1][st_idx:], gL[:,0][st_idx:], kind='slinear')
 
     try:
         signu_ul = logl(2.71/2)
+        # plt.plot(gL[:,0], gL[:,1])
+        # plt.axhline(2.71/2, color="r")
+        # plt.axvline(signu_ul, color="r")
+        # plt.ylim(-2, 30)
+        # plt.grid()
+        # plt.show(block=False)
+        
     except:
+        plt.plot(gL[:,0], gL[:,1])
+        plt.axhline(2.71/2, color="r")
+        plt.ylim(-2, 30)
+        plt.grid()
+        plt.show()
         print(gL[:,1], gL[:,0])
         raise
     

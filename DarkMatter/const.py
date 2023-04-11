@@ -50,7 +50,8 @@ mass4gamma_vegas = np.load(SCRIPT_DIR+"/npy/mass4gamma_vegas.npy")
 
 energyEdges = 10**np.arange(1, 7.01, step=0.2)
 #energyEdges = 10**np.linspace(1, 7, 61)
-defaultNum = {"Segue_1": 295, "Draco": 38, "Bootes_I": 54, "UMi": 113}
+defaultNum_NFW = {"Segue_1": 295, "Draco_II": 38, "Bootes_I": 54, "UMi": 113}
+defaultNum = np.load(SCRIPT_DIR+"/npy/default_num.npy", allow_pickle=True).item()
 
 HDM_Channel2Num = {
     "bbar": 5,

@@ -33,49 +33,40 @@ def plotLikelihoodProfiles(gL):
     plt.legend(fontsize=12, bbox_to_anchor=(1.05, 1), loc='upper left', ncol=3)
 
 
-def plotULcurve(Input, label=None, ax=None, addRelic=False, units="GeV", **kwargs):
-    if Input == "MAGIC":
-        ul_magic = np.load(REF_DIR+"segue_1_MAGIC.npy")
-        ul = np.asarray([ul_magic[:,0], np.log10(ul_magic[:,1])]).T
-        if label == None:
-            label="MAGIC (2014)"
-        kwargs["ls"] = kwargs.get("ls", "-.")
-    elif Input == "VERITAS":
-        ul_veritas = np.load(REF_DIR+"segue_1_VERITAS.npy")
-        ul = np.asarray([ul_veritas[:,0], np.log10(ul_veritas[:,1])]).T
-        if label == None:
-            label="VERITAS (2017)"
-        kwargs["ls"] = kwargs.get("ls", "-.")
-    elif Input == "HAWC":
-        ul_hawc = np.load(REF_DIR+"segue_1_HAWC.npy")
-        ul = np.asarray([ul_hawc[:,0], np.log10(ul_hawc[:,1])]).T
-        if label == None:
-            label="HAWC (2017)"
-        kwargs["ls"] = kwargs.get("ls", "-.")
-    elif Input == "HAWC_bb":
-        ul_hawc = np.load(REF_DIR+"segue_1_HAWC_bb.npy")
-        ul = np.asarray([ul_hawc[:,0], np.log10(ul_hawc[:,1])]).T
-        if label == None:
-            label="HAWC (2017)"
-        kwargs["ls"] = kwargs.get("ls", "-.")
-    elif Input == "VEGAS":
-        ul_v = np.load(REF_DIR+"segue_1_VEGAS.npy")
-        ul = np.asarray([ul_v[:,0], np.log10(ul_v[:,1])]).T
-    elif Input != None:
-        if type(Input) == str:
-            if ".npy" not in Input:
-                Input = Input+".npy"
+def plotULcurve(Input, add_input=None, label=None, ax=None, addRelic=False, units="GeV", smooth=False, **kwargs):
+    
+    if type(Input) == str:
+        
+        if ".npy" not in Input:
+            Input = Input+".npy"
+        try:
 
-            try:
-                ul = np.load(OUTPUT_DIR+Input, allow_pickle=True)
-            except:
-                ul = np.load(Input, allow_pickle=True)
-        elif type(Input) == np.ndarray:    
-            ul = Input
+            ul = np.load(OUTPUT_DIR+Input, allow_pickle=True)
+        except:
+            ul = np.load(Input, allow_pickle=True)
+    elif type(Input) == np.ndarray:    
+        ul = Input
     else:
         print("[Error] Upper limits cannot be imported.")
         return
 
+    if add_input is not None:
+        if type(add_input) == str:
+            if ".npy" not in add_input:
+                add_input = add_input+".npy"
+
+            try:
+                ul_add = np.load(OUTPUT_DIR+add_input, allow_pickle=True)
+            except:
+                ul_add = np.load(add_input, allow_pickle=True)
+        elif type(add_input) == np.ndarray:    
+            ul_add = add_input
+
+        if ul[-1][0] == ul_add[0][0]:
+            ul = np.concatenate([ul,ul_add[1:]])
+        else:
+            ul = np.concatenate([ul,ul_add])
+    
     ul[:,1] = np.nan_to_num(ul[:,1])
     ul = ul[ul[:,1] != 0]
     
@@ -88,7 +79,8 @@ def plotULcurve(Input, label=None, ax=None, addRelic=False, units="GeV", **kwarg
     if np.average(ul[:,1]) >0 :
         ul[:,1] = np.log10(ul[:,1])
 
-    ax.plot(ul[:,0], 10**ul[:,1], label=label, **kwargs)
+    factor = kwargs.pop("factor",1)
+    ax.plot(ul[:,0], 10**ul[:,1]/factor, label=label, **kwargs)
     ax.set_title(r"$\langle \sigma v \rangle$ 95% UL curve", fontsize=15)
 
     ymin = 10**(round(min(ul[:,1]))-1.5)
@@ -113,7 +105,7 @@ def plotULcurve(Input, label=None, ax=None, addRelic=False, units="GeV", **kwarg
     ax.legend(fontsize=12, bbox_to_anchor=(1.05, 1), loc='upper left')
 
 
-def plotExpULcurve(filename=None, dwarf=None, package=None, channel = None, ax=None, addTheta=False, label="Expected Line", version="all", mean_only=False, add_mean=False, units="GeV", which=[68, 95], export=False, **kwargs):
+def plotExpULcurve(filename=None, dwarf=None, package=None, channel = None, ax=None, addTheta=False, version="all", mean_only=False, add_mean=False, units="GeV", which=[68, 95], export=False, **kwargs):
     if addTheta:
         dim = "2D"
     else:
@@ -131,7 +123,7 @@ def plotExpULcurve(filename=None, dwarf=None, package=None, channel = None, ax=N
     if os.path.isfile(OUTPUT_DIR+filename):
         uls = np.load(OUTPUT_DIR+filename, allow_pickle=True).item()
     else:
-        print("[Error] Check your package, dwarf and channel.")
+        print(f"[Error] Check your package, dwarf and channel, {filename}.")
         return
 
     mass = list(uls.keys())
@@ -154,27 +146,37 @@ def plotExpULcurve(filename=None, dwarf=None, package=None, channel = None, ax=N
     #etc = plt.plot(mass, mean_val)
     if ax == None:
         ax = plt.gca()
+
+    etc = None
     
     if mean_only:
-        ax.plot(mass, mean_val, label=label, **kwargs)
+        ax.plot(mass, mean_val, label=kwargs.pop("label",None), **kwargs)
 
         if export:
             data = np.asarray([mass, mean_val]).T
             np.save(filename.split(".")[0]+"_plot", data)
     else:
         if add_mean:
-            ax.plot(mass, mean_val, label=label, **kwargs)
+            etc = ax.plot(mass, mean_val, label=kwargs.pop("label",None), color=kwargs.pop("color",None))
+
         if 95 in which:
-            etc = ax.plot(mass, error_cont[:,2], alpha=0.5, ls="--", **kwargs)    
+            if etc is not None:
+                c = etc[0].get_color()
+            else:
+                c = kwargs.pop("color",None)
+            etc = ax.plot(mass, error_cont[:,2], alpha=0.5, ls="--", color = c)    
             ax.plot(mass, error_cont[:,3], alpha=0.5, ls="--", color = etc[0].get_color())
+
         if 68 in which:
             if 95 in which:
-                ax.fill_between(mass, error_cont[:,0], error_cont[:,1], color = etc[0].get_color(), alpha=0.2, label=label)
+                ax.fill_between(mass, error_cont[:,0], error_cont[:,1], color = etc[0].get_color(), alpha=0.2, label=kwargs.pop("label",None))
             else:
-                ax.fill_between(mass, error_cont[:,0], error_cont[:,1], alpha=0.2, label=label)
+                ax.fill_between(mass, error_cont[:,0], error_cont[:,1], alpha=0.2, label=kwargs.pop("label",None))
+
         if export:
             data = np.asarray([mass, mean_val, error_cont[:,0], error_cont[:,1], error_cont[:,2], error_cont[:,3]]).T
             np.save(filename.split(".")[0]+"_plot", data)
+
     ax.set_xscale("log")
     ax.set_yscale("log")
     if units == "GeV":
@@ -223,6 +225,8 @@ def plotDeviation(Input, expectedLine=None, ax=None, version="all", **kwargs):
     else:
         if ".npy" not in expectedLine:
             filename = expectedLine+".npy"
+        else:
+            filename = expectedLine
             
     if os.path.isfile(OUTPUT_DIR+filename):
         ul_exp = np.load(OUTPUT_DIR+filename, allow_pickle=True).item()
@@ -311,6 +315,9 @@ def plotUnitarity(composite=[1e-1, 1e-2, 1e-3]):
     mv=np.logspace(1.,np.log10(4.e4),100)
     cv="k"
 
+    if len(composite)>=1:
+        ax.text(3e4,4e-18,r'Composite Unitarity',fontsize=13,color="k", ha="right")
+
     for com in composite:
         ax.plot(mv,Rlim(mv,com),ls=(0, (3, 1, 1, 1, 1, 1)),c=cv,lw=0.8,zorder=2)
         if com == 1e-1:
@@ -341,7 +348,7 @@ def plotUnitarity(composite=[1e-1, 1e-2, 1e-3]):
      
     #ax.text(200,3.e-28,r'Non-Thermal Relic',fontsize=13,color=(0.3,0.3,0.3))
     ax.text(1.1e4, 2e-26,r'Partial-Wave Unitarity',fontsize=13,color='k',rotation=339, ha="right")
-    ax.text(3e4,4e-18,r'Composite Unitarity',fontsize=13,color="k", ha="right")
+    
 
     #plt.tight_layout()
     #plt.legend()
