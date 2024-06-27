@@ -37,7 +37,7 @@ class VEGAS:
 		elif int(mode)==4:
 			self.EA, self.Edisp = self.GetNewIRFs(azimuth=azimuth, zenith = zenith, noise=noise, switch=switch)
 
-
+		print("RES")
 	def GetExposure(self):
 		
 		runNum = 0

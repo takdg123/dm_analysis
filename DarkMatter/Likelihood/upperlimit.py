@@ -153,6 +153,7 @@ def calcUpperLimits(dwarf, channel, package="EventDisplay",
                 importedIRF = ResponseFunction.VEGAS.readIRFs(dwarf)
             except:
                 importedIRF = ResponseFunction.VEGAS(dwarf, verbose=(verbosity>1))
+
             
             jProfile = JProfile.generateConvolvedJ(dwarf, package, irf = importedIRF, return_array=True, seed = jSeed, verbose=False,  **kwargs)
     else:
@@ -184,6 +185,8 @@ def calcUpperLimits(dwarf, channel, package="EventDisplay",
             if verbosity>1:
                 print("[Warning] TS value is higher than 25 (M={:.3f} TeV).".format(M/1000))
             continue
+        elif mle.ts < -1:
+            print("[Warning] TS value is less than -1 (M={:.3f} TeV), TS = {}".format(M/1000, mle.ts))
         
         gl[M] = mle.gL
         if verbosity>1:
@@ -238,8 +241,8 @@ def calcUpperLimits(dwarf, channel, package="EventDisplay",
 
 
 def calcExpectedLimits(dwarf, channel, package="EventDisplay", 
-    irf=None, jProfile = None, jArray=False, version="all", th2Cut = 0, 
-    addTheta=False, averagedIRF=False, method = 1, fix_b=False, 
+    irf=None, jProfile = None, jArray=True, version="all", th2Cut = 0, 
+    addTheta=False, averagedIRF=True, method = 1, fix_b=False, 
     filename = None, seed=3, jSeed = -1,
     mass = np.logspace(2, 4.5, 12), 
     bkgModel=None, ext=False, test=False, 
@@ -329,10 +332,12 @@ def calcExpectedLimits(dwarf, channel, package="EventDisplay",
         bkg = kwargs.pop("events", raw_events[raw_events[:,2]==0.0])
         alpha = kwargs.get("alpha", np.average(raw_events[:,3]))
         N_on = kwargs.pop("N_on", len(bkg)*alpha)
+        N_off = kwargs.pop("N_off", len(bkg))
     else:
         bkg = raw_events[raw_events[:,2]==0.0]
         alpha = raw_events[:,3][0]
         N_on = len(bkg)*alpha
+        N_off = len(bkg)
 
     ul = {}
 
@@ -372,19 +377,29 @@ def calcExpectedLimits(dwarf, channel, package="EventDisplay",
     manager = multiprocess.Manager()
 
     for j in range(runs):
+
         N_on_poi = np.random.poisson(N_on)
+        N_off_poi = np.random.poisson(N_off)
+
         if N_on_poi == 0:
             N_on_poi = 1
+        
         selected = np.random.choice(range(len(bkg)), size=N_on_poi)
+        bkg_selected = np.random.randint(len(bkg), size=N_off_poi)
 
         events = bkg[selected]
+        bkg_events = bkg[bkg_selected]
+
         events[:,2] = 1
+
+        events = np.concatenate([events, bkg_events])
+
         processes = []
         
         if package=="EventDisplay":
-            hOn, etc = eventdisplay.readData(dwarf, events=events, ext=ext, version=version)
+            hOn, hOff = eventdisplay.readData(dwarf, events=events, bkgModel=bkgModel, ext=ext)
         elif package=="VEGAS":
-            hOn, etc = vegas.readData(dwarf, events=events)
+            hOn, hOff = vegas.readData(dwarf, events=events, ext=ext)
         else:
             hOn = None
 
@@ -395,8 +410,8 @@ def calcExpectedLimits(dwarf, channel, package="EventDisplay",
                 mle_kwargs = {"channel":channel, "irf":importedIRF, "jProfile":jProfile, "jArray":jArray,
                     "th2Cut":th2Cut, "addTheta":addTheta, "expectedLimit":True,
                     "averagedIRF":averagedIRF, "tau":tau, "version":version, 
-                    "seed":seed, "pN": i, "ext":ext, 
-                    "bkgModel":bkgModel, "N_on": N_on_poi,
+                    "seed":seed, "pN": i, "ext":ext, "N_off": N_off_poi,
+                    "bkgModel":bkgModel, "N_on": N_on_poi, "hOff": hOff,
                     "verbosity":verbosity, "hOn": hOn,
                     "events": events,  "hSignal":hSignal[M], **kwargs}
                 p = multiprocess.Process(target=multiprocessing_mle, args=(dwarf, M, package, output, ), kwargs=mle_kwargs)
@@ -406,8 +421,8 @@ def calcExpectedLimits(dwarf, channel, package="EventDisplay",
                 mle = MLE(dwarf, M, package, channel=channel, irf=importedIRF, jProfile=jProfile, 
                         th2Cut=th2Cut, addTheta=addTheta, 
                         averagedIRF=averagedIRF, version=version, 
-                        seed=seed, expectedLimit=True, 
-                        bkgModel=bkgModel, ext=ext, N_on=N_on_poi,
+                        seed=seed, expectedLimit=True, N_off=N_off_poi,
+                        bkgModel=bkgModel, ext=ext, N_on=N_on_poi, hOff=hOff,
                         verbose=(True if verbosity>1 else False), 
                         events = events, hSignal=hSignal[M], hOn = hOn, **kwargs) 
                 mle.minuit(method=method, upperLimit=True, fix_b=fix_b, **kwargs)
@@ -459,7 +474,7 @@ def calcExpectedLimits(dwarf, channel, package="EventDisplay",
 
 def calcULSysError(dwarf, channel, package="EventDisplay", 
     irf=None, jArray=True, version="all", th2Cut = 0, 
-    addTheta=False, averagedIRF=False, method = 1, 
+    addTheta=False, averagedIRF=True, method = 1, 
     filename = None, seed=4, overWrite=False,
     mass = np.logspace(2, 4.5, 12), 
     bkgModel=None, runs = 1000, ext=False, 

@@ -13,6 +13,7 @@ from . import const
 from ROOT import TH1D, TH2D, TGraph
 from ROOT import TCanvas, gPad, gStyle
 
+
 DM_DIR = os.environ.get('DM')
 REF_DIR = DM_DIR+"/RefData/"
 DATA_DIR = DM_DIR+"/Data/"
@@ -27,6 +28,8 @@ def thetaEdges(thCut):
 
 def printRunList(dwarf, path=None, package ="EventDisplay", printOutput=False, log_only=False, ext=False):
     if package=="EventDisplay":
+        # data = readData(dwarf, rawdata=True, ext=ext)
+        # runlist = np.asarray(list(set(data[:,5]))).astype("int")
         if path==None:
             if ext:
                 runlist = os.listdir(DATA_DIR+dwarf+"_ext")

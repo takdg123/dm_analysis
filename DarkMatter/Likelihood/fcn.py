@@ -57,6 +57,7 @@ def simplefcn(npar, gin, f, par, iflag):
     
 
 def binnedfcn(npar, gin, f, par, iflag):
+
     log = 0
     b = par[0]
     signu = par[1]
@@ -65,20 +66,35 @@ def binnedfcn(npar, gin, f, par, iflag):
     args = np.load(OUTPUT_DIR+"/__temp__/temp_args_{}.npy".format(seed), allow_pickle=True)
     args = args.item()
 
-    g = sum(args["g"])*10**signu
+    alpha = args["alpha"]
+    g = sum(args["hSig"])*10**signu
     g_arr = args["hSig"]*10**signu
-    b_arr = args["hOff"]/sum(args["hOff"])*b
+    b_obs = args["hOff"]
+    on_obs = args["hOn"]
+
+    d = np.sqrt(((1+1./alpha)*g_arr-on_obs-b_obs)**2.+4*(1+1./alpha)*b_obs*g_arr)
+    b_arr = (on_obs+b_obs-(1+1./alpha)*g_arr+d)/(2*(1+alpha))
+    b = sum(b_arr)
 
     valid = (b_arr !=0)
-
-    g_arr[g_arr < 1e-10] = 0
     g_arr = g_arr[valid]
     b_arr = b_arr[valid]
+    b_obs = b_obs[valid]
+    on_obs = on_obs[valid]
 
-    if args["alpha_array"] is not None:
-        logl = - g - sum((args["alpha_array"][valid]+1)*b_arr) + sum(args["hOff"][valid]*np.log(b_arr) + args["hOn"][valid]*np.log((g_arr+args["alpha_array"][valid]*b_arr)))
-    else:
-        logl = - g - (args["alpha"]+1)*b + sum(args["hOff"][valid]*np.log(b_arr) + args["hOn"][valid]*np.log((g_arr+args["alpha"]*b_arr)))
+    logl = -g - (1+alpha)*b+sum(np.nan_to_num(on_obs*np.log(g_arr+alpha*b_arr)+b_obs*np.log(b_arr)))
+
+
+
+    #d = np.sqrt((tb*(1+alpha)*g-S-B)**2.+4*(ts+tb)*B*m*N)
+    #f = (S+B-(ts+tb)*m*N+d)/(2*(ts+tb))
+    #logl = -g - (1+alpha)*b+sum(np.nan_to_num(on_obs*np.log(g_arr+alpha*b_arr)+b_obs*np.log(b_arr)))
+    
+
+    # if args["alpha_array"] is not None:
+    #     logl = - g - sum((args["alpha_array"][valid]+1)*b_arr) + sum(args["hOff"][valid]*np.log(b_arr) + args["hOn"][valid]*np.log((g_arr+args["alpha_array"][valid]*b_arr)))
+    # else:
+    #     
 
     f.value = -logl
 
@@ -97,6 +113,7 @@ def stackedfcn(npar, gin, f, par, iflag):
         args = args.item()
         
         g = sum(args["g"])*10**signu
+        
         logl += args["N_off"]*np.log(b) - g - (args["alpha"]+1)*b
 
         P_tot = 0
@@ -108,6 +125,44 @@ def stackedfcn(npar, gin, f, par, iflag):
             P_tot += sum(np.log(P))
 
         logl += P_tot
+
+
+    f.value = -logl
+
+def stackedbinnedfcn(npar, gin, f, par, iflag):
+
+    logl = 0
+    signu = par[0]
+    numDwarfs = int(par[1])
+
+
+    for i in range(numDwarfs):
+
+        b = int(par[i+2])
+        seed = int(par[numDwarfs+2+i])
+
+        args = np.load(OUTPUT_DIR+"/__temp__/temp_args_{}.npy".format(seed), allow_pickle=True)
+        args = args.item()
+
+        alpha = args["alpha"]
+        g = sum(args["hSig"])*10**signu
+        g_arr = args["hSig"]*10**signu
+        b_obs = args["hOff"]
+        on_obs = args["hOn"]
+
+        d = np.sqrt(((1+1./alpha)*g_arr-on_obs-b_obs)**2.+4*(1+1./alpha)*b_obs*g_arr)
+        b_arr = (on_obs+b_obs-(1+1./alpha)*g_arr+d)/(2*(1+alpha))
+        b = sum(b_arr)
+
+
+        valid = (b_arr !=0)
+        g_arr = g_arr[valid]
+        b_arr = b_arr[valid]
+        b_obs = b_obs[valid]
+        on_obs = on_obs[valid]
+        
+        temp = -g - (1+alpha)*b+sum(np.nan_to_num(on_obs*np.log(g_arr+alpha*b_arr)+b_obs*np.log(b_arr)))
+        logl+=temp
 
     f.value = -logl
 

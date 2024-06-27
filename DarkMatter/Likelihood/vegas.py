@@ -133,7 +133,6 @@ def readData(dwarf, events = [], thCut = 0.17, rawdata=False, addTheta=False, ge
         hOff_2d.GetYaxis().SetTitle("Theta [deg]")
         hOff_2d.GetZaxis().SetTitle("Counts")
     
-
     if len(events)==0:
         if dwarf == "Segue_1":
             path = "VEGAS_Segue_1_events.npy"

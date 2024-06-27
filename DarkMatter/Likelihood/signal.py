@@ -4,7 +4,7 @@ import os
 
 from ROOT import TFile, TH1D, TH2D, TMath
 
-from .spectra import readSpectrum, PPPCspectra, HDMspectra, gridInterpolation
+from .spectra import readSpectrum, PPPCspectra, HDMspectra, WINOspectra, gridInterpolation
 
 from .. import ResponseFunction
 from .. import const, utils
@@ -23,7 +23,7 @@ def calcSignal(dwarf, M, irf, package="EventDisplay", DM_spectra="PPPC",
     jProfile = None, jArray = True, jSeed = -1, channel="tt", ext=False,
     th2Cut=0, eLowerCut=None, eUpperCut = None, addTheta=False, 
     sigma=-23, version="all", ideal=False, normDisp=False, useBias=True, 
-    verbose=False, useScipy = True, **kwargs):
+    verbose=False, useScipy = True,  **kwargs):
     
     if ext and (th2Cut == 0):
         th2Cut = defineTheta2Cut(package, th2cut_ext(dwarf=dwarf, ext=ext))
@@ -58,8 +58,7 @@ def calcSignal(dwarf, M, irf, package="EventDisplay", DM_spectra="PPPC",
             eLowerCut = min(x)
         if eUpperCut == None:
             eUpperCut = max(x)
-            eUpperCut = min(1e6, eUpperCut)
-
+    eUpperCut = min(1e5, eUpperCut)
 
     t_exp = irf.exposure      # Exposure time
 
@@ -74,7 +73,14 @@ def calcSignal(dwarf, M, irf, package="EventDisplay", DM_spectra="PPPC",
     elif DM_spectra=="PPPC":
         PPPC_spec = readSpectrum(channel)
 
-    nfactor = t_exp/(8*np.pi*pow(M, 2))*10**sigma
+    apply_factor = kwargs.pop("apply_factor", False)
+
+    if apply_factor:
+        factor = const.ratio_factor[dwarf]
+    else:
+        factor = 1
+
+    nfactor = t_exp/(8*np.pi*pow(M, 2))*10**sigma*factor
 
     # J profile
     if jArray:
@@ -85,7 +91,10 @@ def calcSignal(dwarf, M, irf, package="EventDisplay", DM_spectra="PPPC",
         else:
             if jProfile is None:
                 if jSeed == -1:
-                    jSeed = random.randrange(0, JProfile.goodPropNum(dwarf)-1)
+                    if kwargs.pop("general", False):
+                        jSeed = random.randrange(0, JProfile.goodPropNum(dwarf)-1)
+                    else:
+                        jSeed = random.randrange(0, 100000)
                 if verbose:
                     print("[Log] Importing the J profile (seed: {}).".format(jSeed))
                 (J1, J2) = JProfile.generateConvolvedJ(dwarf, package, irf=irf, version=version, return_array=True, seed = jSeed, verbose=False, th2Cut=th2Cut, ext=ext, **kwargs)
@@ -246,7 +255,11 @@ def calcSignal(dwarf, M, irf, package="EventDisplay", DM_spectra="PPPC",
                     x_u = 1
                 x_list = np.linspace(x_l, x_u, 100)
                 dx = np.diff(x_list)
-                if DM_spectra == "PPPC":
+
+                if channel == "wino" or DM_spectra == "WINO":
+                    dNdE = WINOspectra(x=x, M=M)
+
+                elif DM_spectra == "PPPC":
                     dNdE = PPPCspectra(channel, x_list, M,  PPPC=PPPC_spec, useScipy=useScipy)
                     dNdE = (sum(utils.center_pt(dNdE)*dx)/(x_u-x_l))
 
@@ -371,7 +384,10 @@ def calcSignal(dwarf, M, irf, package="EventDisplay", DM_spectra="PPPC",
         hg_1d.SetDirectory(0)
         return hg_1d
 
-def combinedCalcSignal(dwarf, M, package="EventDisplay", DM_spectra="PPPC", irf=None, jProfile=None, jArray=True, jSeed = -1, th2Cut = 0, sigma=-23, channel="tt", runbyrun = False, addTheta=False, verbose=False, ideal=False, eLowerCut=None, version="all", normDisp=False, useBias=False, ext=False, **kwargs):
+def combinedCalcSignal(dwarf, M, package="EventDisplay", DM_spectra="PPPC", irf=None, jProfile=None, jArray=True, jSeed = -1, 
+    th2Cut = 0, sigma=-23, channel="tt", runbyrun = False, addTheta=False, 
+    verbose=False, ideal=False, eLowerCut=None, version="all", normDisp=False, 
+    useBias=True, ext=False, **kwargs):
     if ext and (th2Cut == 0):
         th2Cut = defineTheta2Cut(package, th2cut_ext(dwarf=dwarf, ext=ext))
     else:

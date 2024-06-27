@@ -10,20 +10,20 @@ from scipy.interpolate import interp1d
 
 from ROOT import TH1D
 
-def generateFakeEvents(dwarf, M, sigma, irf=None, addTheta=True, decay="tt", ext=False, jSeed=None, poisson=False, **kwargs):
+def generateFakeEvents(dwarf, M, sigma, irf=None, addTheta=False, channel="tt", ext=False, jSeed=None, poisson=False, **kwargs):
 
     if jSeed is None:
         jSeed = defaultNum[dwarf]
     hOn, hOff, n1, n2, evts, alpha = readData(dwarf, addTheta=addTheta, 
                                             ext=ext, full_output=True,
                                             **kwargs)
-    hSignal = combinedCalcSignal(dwarf, M, "EventDisplay", decay=decay, irf=irf, jSeed=jSeed, eLowerCut=min(evts[:,0]),
+    hSignal = combinedCalcSignal(dwarf, M, "EventDisplay", channel=channel, irf=irf, jSeed=jSeed, eLowerCut=min(evts[:,0]),
             sigma=sigma, addTheta=addTheta, ext=ext, averagedIRF=True, **kwargs)
     
     if addTheta:
-        events = gen_evt_2d(hSignal, hOff, poisson=poisson)
+        events = gen_evt_2d(hSignal, hOff, poisson=poisson, minE = min(evts[:,0]))
     else:
-        events = gen_evt_1d(hSignal, hOff, poisson=poisson)
+        events = gen_evt_1d(hSignal, hOff, poisson=poisson, minE = min(evts[:,0]))
 
     return events
 
@@ -55,6 +55,7 @@ def gen_evt_1d(hSignal, hOff=None, poisson=False, alpha=1, ROOT=False, minE = np
     y_on = (yb + ys)[yb>0]
     N_on = int(sum(y_on)/alpha)
 
+
     if ROOT:
         edges = getArray(hSignal, return_edges=True)[1]
         h_samp = TH1D("sampling", "sampling", len(edges)-1, edges)
@@ -84,6 +85,7 @@ def gen_evt_1d(hSignal, hOff=None, poisson=False, alpha=1, ROOT=False, minE = np
         onRegion = stats.rv_discrete(name='onRegion', values=(10**(fit_x+3), fit_y/sum(fit_y)))
         events = onRegion.rvs(size=N_on*100)
         events = events[events>minE*1000]
+        
         selected = np.random.choice(len(events), size=N_on)
         events = events[selected]
         events = np.asarray([[evt/1000] for evt in events])

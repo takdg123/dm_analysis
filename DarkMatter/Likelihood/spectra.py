@@ -6,13 +6,17 @@ from ROOT import TGraph2D, TH2D
 
 from pathlib import Path
 
-from ..const import SCRIPT_DIR, PPPC_Channel2Num, HDM_Channel2Num
+from ..const import REF_DIR, SCRIPT_DIR, PPPC_Channel2Num, HDM_Channel2Num
 
 from scipy.interpolate import RectBivariateSpline
 
 from ..utils import getArray
 
 from HDMSpectra import HDMSpectra
+
+from astropy.table import Table
+
+from scipy.interpolate import interp1d, interp2d
 
 # Read PPPC DM file (AtProduction_gammas1.dat)
 def readSpectrum(channel="tt", data = SCRIPT_DIR+"/external/PPPCSpectra/AtProduction_gammas.dat", plotting=False):
@@ -40,6 +44,33 @@ def readSpectrum(channel="tt", data = SCRIPT_DIR+"/external/PPPCSpectra/AtProduc
     gSpec.GetHistogram().GetXaxis().SetTitle("log_{10} x")
     gSpec.GetHistogram().GetYaxis().SetTitle("M_{#chi} [GeV]")
     return gSpec
+
+def WINOspectra(x=None, M=None, return_table=False):
+    tab = Table(np.load(REF_DIR+"wino_dnde.npy"))
+    if return_table:
+        return tab
+    if M in list(tab["mass"]):
+        tab = tab[tab["mass"]==M]
+        spectra = interp1d(tab["x"], tab["dNdE"])
+        return spectra(x)
+    else:
+        from scipy.interpolate import RegularGridInterpolator
+        dx = list(set(tab["x"]))
+        dy = list(set(tab["mass"]))
+        dx.sort()
+        dy.sort()
+
+        z = []
+        for i in dx:
+            z.append([tab[(tab["x"]==i) * (tab["mass"]==j)]["dNdE"][0] for j in dy])
+
+        spectra = RegularGridInterpolator((dx,dy), z)
+        
+        if np.size(x)==np.size(M):
+            return spectra((x, M))
+        else:
+            M = np.ones(len(x))*M
+            return spectra(np.asarray([dx,M]).T)
 
 def PPPCspectra(channel, x_list, M, PPPC=None, data = SCRIPT_DIR+"/external/PPPCSpectra/AtProduction_gammas.dat", return_dNdx=False, useScipy = True):
     
@@ -113,7 +144,7 @@ def HDMspectra(channel, x_list, M, data = SCRIPT_DIR+"/external/HDMSpectra/data/
     dNdx = np.zeros(len(x_list))
     if channel == "gamma" or channel == "ZZ":
         
-        temp = HDMSpectra.spec(finalstate, initialstate, x_list[valid], M/2., data = data, annihilation=True, delta=True)
+        temp = HDMSpectra.spec(finalstate, initialstate, x_list[valid], M, data = data, annihilation=True, delta=True)
         
         cont = temp[:-1]
         dNdx[valid] = cont
@@ -124,7 +155,7 @@ def HDMspectra(channel, x_list, M, data = SCRIPT_DIR+"/external/HDMSpectra/data/
             delta = 0
 
     else:
-        cont = HDMSpectra.spec(finalstate, initialstate, x_list[valid], M/2., data = data, annihilation=True)
+        cont = HDMSpectra.spec(finalstate, initialstate, x_list[valid], M, data = data, annihilation=True)
         dNdx[valid] = cont
         delta = 0
 

@@ -6,6 +6,8 @@ import re
 
 from ROOT import TFile, TH1D, TH2D, TMath, TCanvas, gPad
 
+import copy
+
 from .. import ResponseFunction
 
 from ..utils import getArray, printRunList, convertToPDF, defineTheta2Cut, center_pt, thetaEdges
@@ -167,14 +169,16 @@ def createEventFile(dwarf, path=None, export=False, verbose=True, biasCut=0.2, e
 		
 	
 	events=np.asarray(events)
+
 	if export:
 		ofile = const.OUTPUT_DIR+'/EventDisplay_Events_{}.txt'.format(dwarf)
+		selected_events = copy.copy(events)
 		with open(ofile, mode="w") as f:
 			f.write("Event[GeV]   Theta[Deg]   isOn   alpha\n")
-			events = events[events[:,7]==1]
-			events = events[events[:,8]==1]
+			selected_events = selected_events[selected_events[:,7]==1]
+			selected_events = selected_events[selected_events[:,8]==1]
 			
-			for evt in events:
+			for evt in selected_events:
 				f.write("{:.3f}\t{:10.5f}\t{:10.0f}\t{:10.3f}\n".format(evt[0], np.sqrt(evt[1]), evt[2], evt[3]))
 	
 	events = np.asarray(events)
@@ -212,14 +216,20 @@ def exportBackground(dwarf):
 
 	print("Backgrounds (dwarf: {}) are saved in {}.".format(dwarf, ofile))
 
-def readData(dwarf, events=[], addTheta=False, th2Cut=0, eLowerCut=0, eUpperCut=1e6, full_output=False, bkgModel=None, rawdata=False, rebinned=False, apply_weight=True, version="all", biasFilter=True, effFilter=True, evt_file=None, ext=False, **kwargs):
-	if ext and (th2Cut == 0):
+def readData(dwarf, events=[], addTheta=False, th2Cut=0, eLowerCut=0, eUpperCut=None, full_output=False, 
+	bkgModel=None, rawdata=False, rebinned=False, apply_weight=True, version="all", 
+	biasFilter=True, effFilter=True, evt_file=None, ext=False, 
+	apply_cuts=True, **kwargs):
+
+	if dwarf =="Test":
+		th2Cut = th2cut_ext(dwarf="Segue_1", ext=True)
+	elif ext and (th2Cut == 0):
 		th2Cut = defineTheta2Cut("EventDisplay", th2cut_ext(dwarf=dwarf, ext=ext))
 	else:
 		th2Cut = defineTheta2Cut("EventDisplay", th2Cut)
 
 	if eLowerCut == None: eLowerCut = 0
-	if eUpperCut == None: eUpperCut = 1e6
+	if eUpperCut == None: eUpperCut = 1e5
 	
 	if ext:
 		eBinEdges = kwargs.get("energyEdges", np.logspace(1, 7, 101))
@@ -272,12 +282,14 @@ def readData(dwarf, events=[], addTheta=False, th2Cut=0, eLowerCut=0, eUpperCut=
 			if ".npy" not in evt_file:
 				evt_file += ".npy"
 			events = np.load(evt_file, allow_pickle=True)
-		events = events[events[:,1] < th2Cut]
-		events = events[(events[:,0] > eLowerCut)*(events[:,0] < eUpperCut)]
-		if biasFilter: events = events[events[:,7]==1]
-		if effFilter: events = events[events[:,8]==1]
-		if version != "all":
-			events = events[events[:,4] == int(version[-1])]
+
+		if apply_cuts:
+			events = events[events[:,1] < th2Cut]
+			events = events[(events[:,0] > eLowerCut)*(events[:,0] < eUpperCut)]
+			if biasFilter: events = events[events[:,7]==1]
+			if effFilter: events = events[events[:,8]==1]
+			if version != "all":
+				events = events[events[:,4] == int(version[-1])]
 
 	if rawdata:
 		return events
@@ -309,47 +321,53 @@ def readData(dwarf, events=[], addTheta=False, th2Cut=0, eLowerCut=0, eUpperCut=
 					else:
 						hOff.Fill(energy, alpha)
 
-	w_avg = np.average(w)
+	if len(w)>=1:
+		w_avg = np.average(w)
+	else:
+		w_avg = 1
 
+	if Noff !=0:
 
-	if bkgModel == "alt":
-		if addTheta:
-			eMin = kwargs.pop("eMin", 500)
-			eMax = kwargs.pop("eMax", 3000)
-			cnts_off = bkg_alt_2D(events, eBinEdges, tBinEdges, eMin=eMin, eMax=eMax)
-		else:
-			eMin = kwargs.pop("eMin", 500)
-			eMax = kwargs.pop("eMax", 3000)
-			cnts_off = bkg_alt_1D(events, eBinEdges, eMin=eMin, eMax=eMax)
-	elif bkgModel == "sm":
-		if addTheta:
-			cnts_off = bkg_sm_2D(events, eBinEdges, tBinEdges)
-		else:
-			cnts_off = bkg_sm_1D(events, eBinEdges)
-	elif bkgModel == "ex":
-		if addTheta:
-			eMin = kwargs.pop("eMin", 500)
-			eMax = kwargs.pop("eMax", 2000)
-			cnts_off = bkg_ex_2D(events, eBinEdges, tBinEdges, eMin=eMin, eMax=eMax)
-		else:
-			eMin = kwargs.pop("eMin", 500)
-			eMax = kwargs.pop("eMax", 2000)
-			cnts_off = bkg_ex_1D(events, eBinEdges, eMin=eMin, eMax=eMax)
-	elif bkgModel == "gaus":
-		if addTheta:
-			cnts_off = bkg_gaus_2D(events, eBinEdges, tBinEdges, alpha = w_avg)
-		else:
-			cnts_off = bkg_gaus_1D(events, eBinEdges, alpha = w_avg)
+		if bkgModel == "alt":
+			if addTheta:
+				eMin = kwargs.pop("eMin", 500)
+				eMax = kwargs.pop("eMax", 3000)
+				cnts_off = bkg_alt_2D(events, eBinEdges, tBinEdges, eMin=eMin, eMax=eMax)
+			else:
+				eMin = kwargs.pop("eMin", 500)
+				eMax = kwargs.pop("eMax", 3000)
+				cnts_off = bkg_alt_1D(events, eBinEdges, eMin=eMin, eMax=eMax)
+		elif bkgModel == "sm":
+			if addTheta:
+				cnts_off = bkg_sm_2D(events, eBinEdges, tBinEdges)
+			else:
+				cnts_off = bkg_sm_1D(events, eBinEdges)
+		elif bkgModel == "ex":
+			if addTheta:
+				eMin = kwargs.pop("eMin", 500)
+				eMax = kwargs.pop("eMax", 2000)
+				cnts_off = bkg_ex_2D(events, eBinEdges, tBinEdges, eMin=eMin, eMax=eMax)
+			else:
+				eMin = kwargs.pop("eMin", 500)
+				eMax = kwargs.pop("eMax", 2000)
+				cnts_off = bkg_ex_1D(events, eBinEdges, eMin=eMin, eMax=eMax)
+		elif bkgModel == "gaus":
+			if addTheta:
+				cnts_off = bkg_gaus_2D(events, eBinEdges, tBinEdges, alpha = w_avg)
+			else:
+				cnts_off = bkg_gaus_1D(events, eBinEdges, alpha = w_avg)
 
-	if bkgModel is not None:
-		if addTheta:
-			for i in range(1, hOff_2d.GetNbinsX()+1):
-				for j in range(1, hOff_2d.GetNbinsY()+1):
-					hOff_2d.SetBinContent(i, j, cnts_off[i-1][j-1]*w_avg)
-		else:
-			for i in range(1, hOff.GetNbinsX()+1):
-				if i <= len(cnts_off):
-					hOff.SetBinContent(i, cnts_off[i-1]*w_avg)
+		if bkgModel is not None:
+			if addTheta:
+				for i in range(1, hOff_2d.GetNbinsX()+1):
+					for j in range(1, hOff_2d.GetNbinsY()+1):
+						hOff_2d.SetBinContent(i, j, cnts_off[i-1][j-1]*w_avg)
+			else:
+				for i in range(1, hOff.GetNbinsX()+1):
+					if i <= len(cnts_off):
+						hOff.SetBinContent(i, cnts_off[i-1]*w_avg)
+
+	
 	if addTheta:
 	    if full_output:
 	        return hOn_2d, hOff_2d, Non, Noff, events, w_avg
@@ -361,7 +379,7 @@ def readData(dwarf, events=[], addTheta=False, th2Cut=0, eLowerCut=0, eUpperCut=
 	    else:
 	        return hOn, hOff
 
-def plotData(dwarf, addTheta=False, events=[], eEdges = [], th2Cut=0, eLowerCut = 0, eUpperCut = 1e6, bkgModel=None, verbose=False, version="all", individual=False, biasFilter=True, effFilter=True, **kwargs):
+def plotData(dwarf, addTheta=False, events=[], eEdges = [], th2Cut=0, eLowerCut = 0, eUpperCut = 1e5, bkgModel=None, verbose=False, version="all", individual=False, biasFilter=True, effFilter=True, **kwargs):
 	th2Cut = defineTheta2Cut("EventDisplay", th2Cut)
 	if bkgModel == None:
 		hOn, hOff = readData(dwarf, addTheta=addTheta, eEdges = eEdges, events=events, th2Cut=th2Cut, bkgModel=bkgModel, eLowerCut=eLowerCut, eUpperCut=eUpperCut, version=version, biasFilter=biasFilter, effFilter=effFilter, **kwargs)

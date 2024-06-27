@@ -39,8 +39,9 @@ class MLE:
     def __init__(self, dwarf, M, package="EventDisplay", channel="tt", irf = None, jProfile = None, jArray=True,
                  addTheta = False, averagedIRF = True, version="all", 
                  th2Cut = 0, ext=False, eLowerCut = None, eUpperCut=None, 
-                 bkgModel=None, seed=0, jSeed=-1, verbose=True, events = [],
-                 ideal=False, test=False, expectedLimit=False, tau=[1], statistic="unbinned", DM_spectra="PPPC", **kwargs):
+                 bkgModel=None, seed=0, jSeed=-1, verbose=True, events = [], filter_he=False,
+                 ideal=False, test=False, expectedLimit=False, tau=[1], 
+                 statistic="unbinned", DM_spectra="PPPC", **kwargs):
 
         if package=="":
             print("[Error] The package is not specified. You need to set package='VEGAS' or package='EventDisplay'")
@@ -84,6 +85,8 @@ class MLE:
         self._args = {}
         self._jSeed = jSeed
         self._statistic = statistic
+
+        self._core = kwargs.pop("core", False)
         
         self._ext = ext
 
@@ -140,8 +143,15 @@ class MLE:
         # Loading Events
         if verbose: print("[Log] Step 2: Loading events...", end="\r")    
         
+        if filter_he:
+            self._eUpperCut = 1e4
+
         if package=="EventDisplay":
-            self.hOn, self.hOff, self.N_on, self.N_off, raw_events, self.alpha = eventdisplay.readData(self.dwarf, addTheta=self.addTheta, full_output=True, bkgModel=bkgModel, th2Cut=self.th2Cut, eLowerCut=self.eLowerCut, eUpperCut=self.eUpperCut, version=self.version, ext=self.ext, **kwargs)
+            self.hOn, self.hOff, self.N_on, self.N_off, raw_events, self.alpha = eventdisplay.readData(self.dwarf, 
+                addTheta=self.addTheta, 
+                full_output=True, bkgModel=bkgModel, th2Cut=self.th2Cut, 
+                eLowerCut=self.eLowerCut, eUpperCut=self.eUpperCut, 
+                version=self.version, ext=self.ext, **kwargs)
             self.events = raw_events[raw_events[:,2]==1.0]
             self.bkgs = raw_events[raw_events[:,2]==0.0]
             self._eLowerCut = min(self.events[:,0])
@@ -156,11 +166,12 @@ class MLE:
         if self.test or self.expectedLimit:
             if verbose: print("[Log] Step 2: Loading events from inputs")
             self.events = events
-            self.N_on = kwargs.get("N_on", self.N_on)
-            self.N_off = kwargs.get("N_off", self.N_off)
-            self.hOn = kwargs.get("hOn", self.hOn)
-            self.hOff = kwargs.get("hOff", self.hOff)
-            self.alpha = kwargs.get("alpha", self.alpha)
+            self.events = events[events[:,2]==1.0]
+            self.N_on = kwargs.pop("N_on", self.N_on)
+            self.N_off = kwargs.pop("N_off", self.N_off)
+            self.hOn = kwargs.pop("hOn", self.hOn)
+            self.hOff = kwargs.pop("hOff", self.hOff)
+            self.alpha = kwargs.pop("alpha", self.alpha)
         
         if not(self.singleIRF) and (package=="EventDisplay"):
             self.hOff = {}
@@ -170,17 +181,29 @@ class MLE:
                 self.hOff[v] = hOff
                 self.N_off_v[v] = N_off
         
+
         if verbose: print("[Log] Step 2: Events are loaded.")
         
         # Loading a model
         if verbose: print("[Log] Step 3: Loading a source model...", end="\r")
         hSignal = kwargs.get("hSignal", None)
         if hSignal is None:
-            if self.channel == "gamma" or self.channel == "delta":
-                self._signu0 = -25
+            if self.channel == "gamma" or self.channel == "delta" :
+                if self.M > 1e5:
+                    self._signu0 = -21
+                else:
+                    self._signu0 = -25
+            elif self.channel == "wino":
+                self._signu0 = -24
+
+
             if package=="EventDisplay":
                 if self.singleIRF:
-                    self.hSignal = calcSignal(self.dwarf, self.M, self.irf, jProfile = jProfile, package=self.package, channel=self.channel, addTheta=self.addTheta, sigma=self.signu0, ideal=ideal, th2Cut=self.th2Cut, eLowerCut=self.eLowerCut, version=self.version, normDisp=self.normDisp, useBias=self.useBias, jArray=jArray, jSeed=self.jSeed, ext=self.ext, DM_spectra=DM_spectra)
+                    self.hSignal = calcSignal(self.dwarf, self.M, self.irf, jProfile = jProfile, package=self.package, 
+                        channel=self.channel, addTheta=self.addTheta, sigma=self.signu0, ideal=ideal, 
+                        th2Cut=self.th2Cut, eLowerCut=self.eLowerCut,  version=self.version, 
+                        normDisp=self.normDisp, useBias=self.useBias, jArray=jArray, 
+                        jSeed=self.jSeed, ext=self.ext, DM_spectra=DM_spectra, **kwargs)
                     self.hSignal.SetDirectory(0)
                 else:
                     self.hSignal = {}
@@ -316,6 +339,10 @@ class MLE:
         return self._ext
 
     @property
+    def core(self):
+        return self._core
+    
+    @property
     def likelihood(self):
         if hasattr(self, "_likelihood"):
             return self._likelihood
@@ -328,6 +355,7 @@ class MLE:
 
         if self.singleIRF:
             self._prob_signal = convertToPDF(self.hSignal, norm=True)
+
             self._prob_signal.SetDirectory(0)
             hg = convertToPDF(self.hSignal, norm=False)
             
@@ -354,14 +382,25 @@ class MLE:
                     self.g.append(g)
 
         p_on = []
+        
         for evt in self.events:
+
             if self.singleIRF:
                 if self.addTheta:
                     val = self._prob_signal.Interpolate(evt[0], evt[1])
                     if val < 0:
                         val = 0
                 else:
+                    if self.core:
+                        e, v = getArray(self.hSignal)
+                        filt = v>0
+                        minE = min(e[filt])
+                        maxE = max(e[filt])
+                        if (evt[0] < minE) or (evt[0]> maxE):
+                            continue
+
                     val = self._prob_signal.Interpolate(evt[0])
+                    
                     if val < 0:
                         val = 0
                 p_on.append(val)
@@ -407,6 +446,13 @@ class MLE:
         p_off = []
         p_off_err = []
 
+        if self.core:
+            e, v = getArray(self.hSignal)
+            filt = v>0
+            
+            self.N_off = sum(getArray(self.hOff)[1])/self.alpha
+            self.N_on = sum(getArray(self.hOn)[1])
+
         for evt in self.events:
             if self.singleIRF:
                 if self.addTheta:
@@ -416,12 +462,21 @@ class MLE:
                         p_off_err.append([evt[0], evt[1]])
 
                 else:    
+                    if self.core:
+                        e, v = getArray(self.hSignal)
+                        filt = v>0
+                        minE = min(e[filt])
+                        maxE = max(e[filt])
+                        if (evt[0] < minE) or (evt[0]> maxE):
+                            continue
+
                     val = self._prob_bg.Interpolate(evt[0])
                     if val <= 0:
                         val = 0
                         p_off_err.append([evt[0]])
 
                 p_off.append(float(val))
+                
             else:
                 evt_version = "v"+str(int(evt[4]))
                 if self.addTheta:
@@ -439,7 +494,12 @@ class MLE:
 
         if kwargs.pop("correction", False):
             p_off = np.asarray(p_off)
-            minp = min(p_off[p_off!=0])
+            if len(p_off[p_off!=0]) == 0:
+                print("[Error] There is an issue in calculating the p_off.")
+                minp = 0
+            else:
+                minp = min(p_off[p_off!=0])
+
             p_off[p_off==0] = minp
             self._min_p = minp
 
@@ -512,6 +572,7 @@ class MLE:
             P = np.asarray(P)
             P = P[P>0]
             logl0 = self.N_off*np.log(b_null) - (self.alpha+1)*b_null+sum(np.log(P))
+            
         elif self.statistic == "binned":
             alpha_arr = kwargs.get("alpha_array", None)
             b_arr = self.args["hOff"]/sum(self.args["hOff"])*b_null
@@ -555,7 +616,7 @@ class MLE:
             self.p_on = None
             self.p_off = None
             self.g = [sum(getArray(self.hSignal)[1])]
-
+        
         self.args["dwarf"]  = self.dwarf
         self.args["events"] = self.events
         self.args["alpha"]  = self.alpha
@@ -575,12 +636,24 @@ class MLE:
         
         if self.singleIRF:
             if self.addTheta:
+
                 self.args["hOn"]    = getArray(self.hOn)[0].flatten()
                 self.args["hSig"]   = getArray(self.hSignal)[0].flatten()
                 if kwargs.get("alpha_corrected", True):
                     self.args["hOff"]   = getArray(self.hOff)[0].flatten()/self.alpha
                 else:
                     self.args["hOff"]   = getArray(self.hOff)[0].flatten()
+            elif self.core:
+                e, v = getArray(self.hSignal)
+                filt = v>0
+                    
+                self.args["hOn"]    = getArray(self.hOn)[1][filt]
+                self.args["hSig"]   = getArray(self.hSignal)[1][filt]
+                if kwargs.get("alpha_corrected", True):
+                    self.args["hOff"]   = getArray(self.hOff)[1][filt]/self.alpha
+                else:
+                    self.args["hOff"]   = getArray(self.hOff)[1][filt]
+
             else:
                 self.args["hOn"]    = getArray(self.hOn)[1]
                 self.args["hSig"]   = getArray(self.hSignal)[1]
@@ -630,6 +703,7 @@ class MLE:
             fit.SetFCN(fcn)
         elif self.statistic == "binned":
             fit.SetFCN(binnedfcn)
+            fix_b = True
         elif self.statistic == "simple":
             fit.SetFCN(simplefcn)
         
@@ -679,7 +753,7 @@ class MLE:
         b_min, b_err = map(ctypes.c_double, (0.50, 0.51))
         signu_min, signu_err = map(ctypes.c_double, (0.40, 0.41))
         
-        fit.mnstat( logl, edm, errdef, nvpar, nparx, icstat )        
+        fit.mnstat(logl, edm, errdef, nvpar, nparx, icstat )        
         fit.GetParameter(0, b_min, b_err)
         fit.GetParameter(1, signu_min, signu_err)
         
@@ -998,6 +1072,7 @@ class MLE:
 
         if manual:
             x_signu, y_signu = self.__manualScan__()
+            print(x_signu, y_signu)
         else:
             x_signu, y_signu = getArray(gLSignu)
 
