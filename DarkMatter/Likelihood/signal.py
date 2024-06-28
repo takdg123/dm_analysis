@@ -167,14 +167,13 @@ def calcSignal(dwarf, M, irf, package="EventDisplay", DM_spectra="PPPC",
         
     if package=="EventDisplay":
         if ext:
-            eBinEdges = kwargs.get("energyEdges", np.logspace(1, 7, 61))
+            eBinEdges = kwargs.get("energyEdges", np.logspace(2, 7, 101))
         else:
             eBinEdges = kwargs.get("energyEdges", const.energyEdges)
         
     elif package=="VEGAS":
         eBinEdges = kwargs.pop("energyEdges", const.eVJbins)
 
-    energyEdges = np.logspace(1, 7, 37)
     
     if not(useBias) and not(ideal):
         z, etr, erec = getArray(hDisp, return_edges=True)

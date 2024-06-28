@@ -232,7 +232,7 @@ def readData(dwarf, events=[], addTheta=False, th2Cut=0, eLowerCut=0, eUpperCut=
 	if eUpperCut == None: eUpperCut = 1e5
 	
 	if ext:
-		eBinEdges = kwargs.get("energyEdges", np.logspace(1, 7, 61))
+		eBinEdges = kwargs.get("energyEdges", np.logspace(2, 7, 101))
 	else:
 		eBinEdges = kwargs.get("energyEdges", const.energyEdges)
 
