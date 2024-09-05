@@ -4,7 +4,7 @@ import os
 
 from ROOT import TFile, TH1D, TH2D, TMath
 
-from .spectra import readSpectrum, PPPCspectra, HDMspectra, WINOspectra, gridInterpolation
+from .spectra import readSpectrum, PPPCspectra, HDMspectra, WINOspectra, COSMIXspectra, gridInterpolation
 
 from .. import ResponseFunction
 from .. import const, utils
@@ -174,7 +174,6 @@ def calcSignal(dwarf, M, irf, package="EventDisplay", DM_spectra="PPPC",
     elif package=="VEGAS":
         eBinEdges = kwargs.pop("energyEdges", const.eVJbins)
 
-    
     if not(useBias) and not(ideal):
         z, etr, erec = getArray(hDisp, return_edges=True)
         if len(erec) != len(eBinEdges):
@@ -273,6 +272,9 @@ def calcSignal(dwarf, M, irf, package="EventDisplay", DM_spectra="PPPC",
                     
                     #dNdE, delta = HDMspectra(channel, x, M)
                     dNdE += delta/dEtr
+                elif DM_spectra == "COSMIX":
+                    dNdE = COSMIXspectra(channel, x_list, M)
+                    dNdE = (sum(utils.center_pt(dNdE)*dx)/(x_u-x_l))
 
                 if dNdE < 0:
                     dNdE = 0

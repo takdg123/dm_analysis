@@ -8,6 +8,8 @@ import matplotlib.pyplot as plt
 
 import scipy
 
+
+
 def bkg_sm_1D(events, binEdges, eMin = 0):
 	bkg = events[events[:,2]==0.0]
 	cnts, binEdges = np.histogram(bkg[:,0], bins=binEdges)
@@ -94,6 +96,46 @@ def bkg_gaus_2D(events, eBinEdges, tBinEdges, sigma=1, alpha=1):
 		
 	cnts=np.asarray(cnts).T
 	return cnts
+
+def bkg_irf_1D(events, binEdges, dwarf, resolution=1000, ext=False, alpha=1):
+	from .. import ResponseFunction
+
+	re_dist = np.zeros(resolution)
+	re_dist_eng = np.logspace(1, 7, resolution)
+	res = ResponseFunction.EventDisplay.readIRFs(dwarf, ext=ext)
+	bkg = events[events[:,2] == 0.0][:,0]
+	y, x = np.histogram(bkg, bins=binEdges)
+	x = center_pt(x)
+	for e in bkg:
+	    ratio = e/re_dist_eng
+	    temp = []
+	    for i, r in enumerate(ratio):
+	        if r < 0.5 or r>3:
+	            temp.append(0)
+	            
+	            continue
+	        temp.append(res.Bias.Interpolate(np.log10(e)-3, r))
+	    temp = np.asarray(temp)
+	    temp = temp/sum(temp)
+	    re_dist += temp
+	re_dist = np.asarray(re_dist)
+	re_dist = re_dist/max(re_dist)
+	re_dist = re_dist*max(y)
+
+	from scipy.interpolate import interp1d
+
+	new_y = interp1d(re_dist_eng, re_dist)
+	interp_y = new_y(x)
+	correction = np.average(interp_y[y!=0]/y[y!=0])
+	re_dist = re_dist/correction
+
+	re_dist[re_dist_eng<min(bkg)] = 0
+
+	old_y = interp1d(x, y)
+	well_observed = (re_dist_eng<1000)*(re_dist_eng>min(bkg))
+	re_dist[well_observed] = old_y(re_dist_eng[well_observed])
+
+	return re_dist, np.logspace(1, 7, resolution+1)
 
 def bkg_ex_1D(events, binEdges, eMin = 300, eMax = 10000, plotting=False, overlap=False, order=1):
 	bkg = events[events[:,2] == 0.0][:,0]

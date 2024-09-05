@@ -38,9 +38,9 @@ def printRunList(dwarf, path=None, package ="EventDisplay", printOutput=False, l
         else: 
             runlist = os.listdir(path)
         if log_only:
-            runlist = [l[:5] for l in runlist if ".anasum.log" in l]
+            runlist = [l.split(".")[0] for l in runlist if ".anasum.log" in l]
         else:
-            runlist = [l[:5] for l in runlist if ".anasum.root" in l]
+            runlist = [l.split(".")[0] for l in runlist if ".anasum.root" in l]
             
     elif package=="VEGAS":
         if dwarf == "segue_1":
@@ -133,6 +133,10 @@ def convertHist(arr_x, arr_y):
         h = TGraph()
         for i, (x, y) in enumerate(zip(arr_x, arr_y)):
             h.SetPoint(i, x, y)
+    elif (len(arr_x)-1) == len(arr_y):
+        h = TH1D("th_1D", "th_1D", len(arr_x)-1, arr_x)
+        for i, y in enumerate(arr_y):
+            h.SetBinContent(i+1, y)
     return h
     
 def findIrfFile(filename, return_name=False):
@@ -266,37 +270,46 @@ def convertEdisp(h):
     hDispProb.SetDirectory(0)
     return hDispProb     
 
-def convertToPDF(hg, norm = True):
+def convertToPDF(hg, norm = True, apply_gp=False):
     h = hg.Clone()
     h.SetTitle("Probability density function")
-    if h.Class_Name() == "TH1D":
-        if norm:
-            h.GetYaxis().SetTitle("Likelihood")
-        else:
-            h.GetYaxis().SetTitle("Differential counts")
-        for i in range(1, h.GetNbinsX()+1):
-            dh = h.GetXaxis().GetBinWidth(i)
-            val = h.GetBinContent(i)
-            h.SetBinContent(i, val/dh)
-        n_factor = h.Integral(1, h.GetNbinsX(), "width")
+
+    if apply_gp:
+        cnts, bins = getArray(hg, return_edges=True)
+        new_cnts = applyGP2Data(cnts, bins, data_type="counts", return_type="pdf")
+        h = convertHist(bins, new_cnts)
+        n_factor = h.Integral(1, -1, "width")
         if n_factor!=0 and norm:
-            h.Scale(1.0/n_factor)
-    elif h.Class_Name() == "TH2D":
-        if norm:
-            h.GetZaxis().SetTitle("Likelihood")
-        else:
-            h.GetZaxis().SetTitle("Differential counts")
-            
-        for i in range(1, h.GetNbinsX()+1):
-            for j in range(1, h.GetNbinsY()+1):
-                dx = h.GetXaxis().GetBinWidth(i)
-                dy = h.GetYaxis().GetBinWidth(j)
-                val = h.GetBinContent(i, j)
-                h.SetBinContent(i, j, val/(dx*dy))
+           h.Scale(1.0/n_factor)
+    else:
+        if h.Class_Name() == "TH1D":
+            if norm:
+                h.GetYaxis().SetTitle("Likelihood")
+            else:
+                h.GetYaxis().SetTitle("Differential counts")
+            for i in range(1, h.GetNbinsX()+1):
+                dh = h.GetXaxis().GetBinWidth(i)
+                val = h.GetBinContent(i)
+                h.SetBinContent(i, val/dh)
+            n_factor = h.Integral(1, h.GetNbinsX(), "width")
+            if n_factor!=0 and norm:
+                h.Scale(1.0/n_factor)
+        elif h.Class_Name() == "TH2D":
+            if norm:
+                h.GetZaxis().SetTitle("Likelihood")
+            else:
+                h.GetZaxis().SetTitle("Differential counts")
                 
-        n_factor = h.Integral(1, h.GetNbinsX(), 1, h.GetNbinsY(), "width")
-        if n_factor!=0 and norm:
-            h.Scale(1.0/n_factor)
+            for i in range(1, h.GetNbinsX()+1):
+                for j in range(1, h.GetNbinsY()+1):
+                    dx = h.GetXaxis().GetBinWidth(i)
+                    dy = h.GetYaxis().GetBinWidth(j)
+                    val = h.GetBinContent(i, j)
+                    h.SetBinContent(i, j, val/(dx*dy))
+                    
+            n_factor = h.Integral(1, h.GetNbinsX(), 1, h.GetNbinsY(), "width")
+            if n_factor!=0 and norm:
+                h.Scale(1.0/n_factor)
     h.SetDirectory(0)
     return h
 
@@ -406,6 +419,89 @@ def listOfVersions(dwarf):
             print("[Error] An event file does not exist.")
     version = ["v"+str(int(v)) for v in list(set(events[:,4]))]
     return version
+
+
+def applyGP2Data(data, bins, data_type="energy", return_type="pdf", return_gp=False, rand=False, ax=None, show_plot=False, add_error=True, **kwargs):
+    
+    from sklearn.gaussian_process import GaussianProcessRegressor
+    from sklearn.gaussian_process.kernels import RBF, ConstantKernel as C, WhiteKernel
+    
+    if data_type=="energy":
+        y_cnt, x = np.histogram(data, bins)
+        if rand:
+            y_cnt = synthesize_counts(yarr)
+    elif data_type=="counts":
+        y_cnt = data
+        x = bins
+        
+    if return_type == "pdf":
+        y = y_cnt/sum(y_cnt)/(x[1:]-x[:-1])
+    else:
+        y = y_cnt
+        
+    x_cnt = center_pt(np.log10(x))
+
+    non_zero_mask = (y != 0)
+    selected_y = np.log10(y[non_zero_mask])
+    selected_x = x_cnt[non_zero_mask]
+    
+    kernel = C(1.0, (1e-4, 1e2)) * RBF(1.0, (1e-4, 1e2)) + WhiteKernel(noise_level=1, noise_level_bounds=(1e-4, 1e2))
+    gp = GaussianProcessRegressor(kernel=kernel, n_restarts_optimizer=10)
+    gp.fit(selected_x.reshape(-1, 1), selected_y)
+    
+    if show_plot:
+        sigma = kwargs.pop("sigma", 1)
+        x_pred = np.linspace(np.log10(min(data)), np.log10(max(data)), 1000)
+        y_pred, error = gp.predict(x_pred.reshape(-1,  1), return_std=add_error)
+        
+        if ax is None:
+            ax = plt.gca()
+        etc = ax.scatter(10**selected_x, 10**selected_y, marker="+", **kwargs)
+        ax.plot(10**x_pred, 10**y_pred,  color=etc.get_edgecolor())
+        if add_error:
+            ax.fill_between(10**x_pred, 10**(y_pred - sigma*error), 10**(y_pred + sigma*error), alpha=0.2, color=etc.get_edgecolor())
+        ax.set_xscale("log")
+        ax.set_yscale("log")
+        ax.set_xlim(80, 2e5)
+        ax.set_ylabel("Probability Density Function")
+        ax.set_xlabel("Energy [GeV]")
+        ax.legend()
+    if return_gp:
+        return gp
+    else:
+        y_new = np.zeros(len(y_cnt))
+        start_index = np.argmax(y_cnt != 0)
+        x_new = x_cnt[start_index:]
+        y_pred = gp.predict(x_new.reshape(-1,  1))
+        y_new[start_index:]=y_pred
+        y_new = 10**y_new
+        y_new[y_new==1] = 0
+        y_new[x_cnt>5] = 0
+        return y_new
+        
+
+def bin_correction(data, bins, shift=False):
+    if shift:
+        bin_cnt = 10**center_pt(np.log10(bins))
+        diff = np.log10(bin_cnt)[np.argmin(abs(shift-bin_cnt))]-np.log10(shift)
+        bins = 10**(np.log10(bins)-diff)
+    new_edges = bins[sum(bins<min(data))-1:]
+    new_edges[0] = min(data)*(1-1e-5)
+    return new_edges
+
+def synthesize_counts(yarr):
+
+    empty = True
+    new_cnt = []
+    for y in yarr:
+        if y>0:
+            empty=False
+
+        if not(empty):
+            new_cnt.append(np.random.poisson(lam=y))
+        else:
+            new_cnt.append(0)
+    return np.array(new_cnt)
 
 def plotRoot(h, h2=None, logx=False, logy=False, same=True, logx2=False, logy2=False, logz=False, logz2=False):
     cName = h.Class_Name()

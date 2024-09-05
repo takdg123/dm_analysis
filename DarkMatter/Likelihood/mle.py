@@ -434,12 +434,12 @@ class MLE:
         
         if self._prob_bg == None:
             if self.singleIRF:
-                self._prob_bg = convertToPDF(self.hOff, norm=True)
+                self._prob_bg = convertToPDF(self.hOff, norm=True, apply_gp=kwargs.pop("apply_gp", False))
                 self._prob_bg.SetDirectory(0)
             else:
                 self._prob_bg = {}
                 for v in self.listOfVersions:
-                    self._prob_bg[v] = convertToPDF(self.hOff[v], norm=True)
+                    self._prob_bg[v] = convertToPDF(self.hOff[v], norm=True, apply_gp=kwargs.pop("apply_gp", False))
                     self._prob_bg[v].SetDirectory(0)
         
 

@@ -36,6 +36,7 @@ def fcn(npar, gin, f, par, iflag):
 
         P = args["alpha"]*b_v*args["p_off"][i] + (args["g"][i]*10**signu)*args["p_on"][i]
         P = P[P>0]
+
         P_tot += sum(np.log(P))
 
     logl += P_tot

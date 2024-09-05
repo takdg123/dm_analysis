@@ -208,14 +208,14 @@ def plotExpULcurve(filename=None, dwarf=None, package=None, channel = None,
             np.save(filename.split(".")[0]+"_plot", data)
     else:
         if add_mean:
-            etc = ax.plot(mass, mean_val, label=kwargs.pop("label",None), color=kwargs.pop("color",None))
+            etc = ax.plot(mass, mean_val, label=kwargs.pop("label",None), ls="-", lw=3, color=kwargs.pop("color",None))
 
         if 68 in which:
             if etc is not None:
                 c = etc[0].get_color()
             else:
                 c = kwargs.pop("color",None)
-            etc = ax.fill_between(mass, error_cont[:,0], error_cont[:,1], color=c, alpha=0.2, label=kwargs.pop("label",r"H$_0$ (68% Cl.)"))
+            etc = ax.fill_between(mass, error_cont[:,0], error_cont[:,1], color=c, alpha=0.5, ls="-", )
 
         if 95 in which:
             if etc is not None:
@@ -225,8 +225,10 @@ def plotExpULcurve(filename=None, dwarf=None, package=None, channel = None,
                     c = etc[0].get_color()
             else:
                 c = kwargs.pop("color",None)
-            etc = ax.plot(mass, error_cont[:,2], alpha=0.5, ls="-", color = c, label=r"This work (Ando+20; 126 hrs; 95% Cl.)")   
-            ax.plot(mass, error_cont[:,3], alpha=0.5, ls="-", color = etc[0].get_color())
+            etc = ax.fill_between(mass, error_cont[:,0], error_cont[:,2], hatch="++", color=c, alpha=0.3, )
+            etc = ax.fill_between(mass, error_cont[:,1], error_cont[:,3],  hatch="++", color=c,  alpha=0.3,  )
+            # etc = ax.plot(mass, error_cont[:,2], alpha=0.5, ls="-", color = c, label=r"This work (Ando+20; 126 hrs; 95% Cl.)")   
+            # ax.plot(mass, error_cont[:,3], alpha=0.5, ls="-", color = etc[0].get_color())
 
         if export:
             data = np.asarray([mass, mean_val, error_cont[:,0], error_cont[:,1], error_cont[:,2], error_cont[:,3]]).T
@@ -342,38 +344,54 @@ def plotDeviation(Input, expectedLine=None, ax=None, version="all", **kwargs):
     #ax.legend(fontsize=12)
 
 def plotPublication(channel, print_chan=True, textloc=0.5, log_label=False, **kwargs):
-    if channel not in ["bbar", "tt"]:
-        print("[Error] Choose other channel: tt, or bbar.")
-        return
+    if channel=="wino":
+        plotULcurve(f"HAWC_WINO", label="HAWC (2020; 1038d)", ls=":", lw=3, log_label=log_label, **kwargs)
+        plotULcurve(f"MAGIC_WINO", label="MAGIC (2022; 354h)", ls="--", lw=3, log_label=log_label, **kwargs)
+        plotULcurve(f"HESS_WINO", label="H.E.S.S. (2020; 82h)", ls="-.", lw=3, log_label=log_label, **kwargs)
+        plt.legend(loc=4)
+        if log_label:
+            plt.ylim(np.log10(8e-27), np.log10(2e-22))
+        else:
+            plt.ylim(8e-27, 2e-22)
 
-    addRelic = kwargs.pop("addRelic", False)
-
-    plotULcurve(f"fermi_6y_{channel}", label="Fermi-LAT (2015; 6y)", ls="--", log_label=log_label, **kwargs)
-    plotULcurve(f"magic_354h_{channel}", label="MAGIC (2022; 354h)", ls="--", log_label=log_label, **kwargs)
-    #plotULcurve(f"veritas_216h_{channel}", label="VERITAS (2017; 216h)", ls="--", **kwargs)
-    plotULcurve(f"hess_80h_{channel}", label="H.E.S.S. (2020; 80h)", ls="--", log_label=log_label, **kwargs)
-    plotULcurve(f"hawc_1038d_{channel}", label="HAWC (2020; 1038d)", ls="--", log_label=log_label, addRelic=addRelic, **kwargs)
-    if print_chan:
-        ax = plt.gca()
-        if channel == "bbar":
-            plt.text(0.9, textloc, r"$\chi\chi \rightarrow b\bar{b}$", fontsize=15, ha="right", transform=ax.transAxes)
-        elif channel == "tt":
-            plt.text(0.9, textloc, r"$\chi\chi \rightarrow \tau^{+}\tau^{-}$", fontsize=15, ha="right", transform=ax.transAxes)
-    plt.legend(loc=4)
-    if log_label:
-        plt.ylim(np.log10(8e-27), np.log10(2e-20))
     else:
-        plt.ylim(8e-27, 2e-20)
+        if channel not in ["bbar", "tt"]:
+            print("[Error] Choose other channel: tt, or bbar.")
+            return
 
-def plotPredictedLine(ax=None, units="GeV"):
+        addRelic = kwargs.pop("addRelic", False)
+
+        plotULcurve(f"fermi_6y_{channel}", label="Fermi-LAT (2015; 6y)", ls=(0, (3, 5, 1, 5, 1, 5)), lw=3, log_label=log_label, **kwargs)
+        plotULcurve(f"magic_354h_{channel}", label="MAGIC (2022; 354h)", ls="-.", lw=3, log_label=log_label, **kwargs)
+        #plotULcurve(f"veritas_216h_{channel}", label="VERITAS (2017; 216h)", ls="--", **kwargs)
+        plotULcurve(f"hess_80h_{channel}", label="H.E.S.S. (2020; 80h)", ls=":", lw=3, log_label=log_label, **kwargs)
+        plotULcurve(f"hawc_1038d_{channel}", label="HAWC (2020; 1038d)", ls="--",lw=3, log_label=log_label, addRelic=addRelic, **kwargs)
+        if print_chan:
+            ax = plt.gca()
+            if channel == "bbar":
+                plt.text(0.9, textloc, r"$\chi\chi \rightarrow b\bar{b}$", fontsize=15, ha="right", transform=ax.transAxes)
+            elif channel == "tt":
+                plt.text(0.9, textloc, r"$\chi\chi \rightarrow \tau^{+}\tau^{-}$", fontsize=15, ha="right", transform=ax.transAxes)
+        plt.legend(loc=4)
+        if log_label:
+            plt.ylim(np.log10(8e-27), np.log10(2e-20))
+        else:
+            plt.ylim(8e-27, 2e-20)
+
+def plotPredictedLine(ax=None, units="GeV", addRelic = False, **kwargs):
     from astropy.table import Table
     if ax is None:
         ax = plt.gca()
     data = Table(np.load(REF_DIR+"/sigvLineNLL.npy"))
     if units=="TeV":
         data["mass"]/=1000
+        if addRelic:
+            ax.axvspan(2.7, 3.0, color="red", label="Thermal WINO mass", alpha=0.5)
+    elif addRelic:
+        ax.axvspan(2700, 3000, color="red", label="Thermal WINO mass", alpha=0.5)
 
-    ax.plot(data["mass"], data["signu"], color="k")
+    ax.plot(data["mass"], data["signu"], label="WINO prediction", **kwargs)
+
 
 def plotUnitarity(composite=[1e-1, 1e-2, 1e-3], vrel = 2.e-5, log_label=False):
     TeV2cm3s = 1.1673299710900705e-23

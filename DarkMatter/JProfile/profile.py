@@ -104,6 +104,8 @@ def Distance2Dwarf(dwarf):
         Dis = 97.
     elif (dwarf == 'UMa_II'):
         Dis = 32.
+    elif (dwarf == 'UMa_III'):
+        Dis = 10.
     elif (dwarf == 'Willman_1'):
         Dis = 38.
     return Dis*1000
@@ -168,7 +170,11 @@ def getThMax(dwarf):
 
 def classicNFW(dwarf, seed, props=[]):
     los=lambda x, b, props: calcNFWProfile(props, np.sqrt(b**2+x**2))**2
-    if len(props) == 0:
+
+    if dwarf == "UMa_III":
+        props = [0.276, 1051.3, 87]
+        return props, los
+    elif len(props) == 0:
         if seed == -1:
             seed = random.randrange(0, 100000)
         prop_table = NFWdwarfParam(dwarf)

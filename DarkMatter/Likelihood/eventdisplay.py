@@ -40,6 +40,7 @@ def createEventFile(dwarf, path=None, export=False, verbose=True, biasCut=0.2, e
 
 	events = []
 
+
 	for run in runlist:
 		if path==None:
 			if ext:
@@ -356,6 +357,13 @@ def readData(dwarf, events=[], addTheta=False, th2Cut=0, eLowerCut=0, eUpperCut=
 				cnts_off = bkg_gaus_2D(events, eBinEdges, tBinEdges, alpha = w_avg)
 			else:
 				cnts_off = bkg_gaus_1D(events, eBinEdges, alpha = w_avg)
+		elif bkgModel == "irf":
+			cnts_off, ebins = bkg_irf_1D(events, eBinEdges, dwarf = dwarf, ext=ext, alpha=w_avg)
+			hOff = TH1D("hOff", "hOff_1D", len(ebins)-1, ebins)
+			hOff.SetTitle("Count spectrum (off region)")
+			hOff.GetXaxis().SetTitle("Energy [GeV]")
+			hOff.GetYaxis().SetTitle("Counts")
+			hOff.SetDirectory(0)
 
 		if bkgModel is not None:
 			if addTheta:
@@ -426,7 +434,8 @@ def plotData(dwarf, addTheta=False, events=[], eEdges = [], th2Cut=0, eLowerCut 
 			xOff_m, yOff_m = getArray(hOff_m)
 		else:
 			yOff_m = []
-		plotTwoHist(xOn, yOn, xOff, yOff, yOff_m)
+			xOff_m = []
+		plotTwoHist(xOn, yOn, xOff, yOff, y_model=yOff_m, x_model=xOff_m)
 
 def plotTwoHist_2D(hOn, hOff, hOff_m, save=False):
 	output_s, x, y = getArray(hOn, return_edges=True)
@@ -442,7 +451,7 @@ def plotTwoHist_2D(hOn, hOff, hOff_m, save=False):
 			plt.savefig(const.OUTPUT_DIR+"/figure/Theta={:.0f}deg".format(y_ctr[i]*1000))
 		plt.show(block=False)
 
-def plotTwoHist(xOn, yOn, xOff, yOff, y_model=[], label=["On region", "Off region", "Off-region model"]):
+def plotTwoHist(xOn, yOn, xOff, yOff, y_model=[], x_model = [], label=["On region", "Off region", "Off-region model"]):
 
 	dof = len(yOff[yOff!=0])
 
@@ -451,6 +460,8 @@ def plotTwoHist(xOn, yOn, xOff, yOff, y_model=[], label=["On region", "Off regio
 	ax[0].step(xOff, yOff, label=label[1], where="mid")
 	if len(y_model) == len(xOff):
 		ax[0].step(xOff, y_model, label=label[2], where="mid")
+	else:
+		ax[0].plot(x_model, y_model, label=label[2])
 	
 	ax[0].set_xscale("log")
 	ax[0].set_yscale("log")
@@ -467,17 +478,18 @@ def plotTwoHist(xOn, yOn, xOff, yOff, y_model=[], label=["On region", "Off regio
 		ax[1].set_ylabel(r"ratio (%)", fontsize=15)
 		ax[1].set_ylim(-max(abs(ratio)+3), max(abs(ratio)+3))
 	else:
-		if len(y_model) == len(xOff):
-			chisq = sum((yOn[y_model!=0]-y_model[y_model!=0])**2/y_model[y_model!=0])
-			chi = np.sign(yOn[y_model!=0]-y_model[y_model!=0])*(y_model[y_model!=0]-yOn[y_model!=0])**2./y_model[y_model!=0]
-			ax[1].errorbar(xOn[y_model!=0], chi, yerr= 1, marker="+", ls="", c="k", label="chisq")
-		else:
-			chisq = sum((yOn[yOff!=0]-yOff[yOff!=0])**2/yOff[yOff!=0])
-			chi = np.sign(yOn[yOff!=0]-yOff[yOff!=0])*(yOff[yOff!=0]-yOn[yOff!=0])**2./yOff[yOff!=0]
-			ax[1].errorbar(xOn[yOff!=0], chi, yerr= 1, marker="+", ls="", c="k", label="chisq")
-		ax[0].text(0.95, 0.6, r"$\chi^2$ / dof = {:.1f} / {} = {:.2f}".format(chisq, dof, chisq/dof), ha="right", fontsize=12, transform=ax[0].transAxes)
-		ax[1].set_ylabel(r"$\chi^2$", fontsize=15)
-		ax[1].set_ylim(-max(abs(chi)+1.2), max(abs(chi)+1.2))
+		if len(y_model) == len(yOn):
+			if len(y_model) == len(xOff):
+				chisq = sum((yOn[y_model!=0]-y_model[y_model!=0])**2/y_model[y_model!=0])
+				chi = np.sign(yOn[y_model!=0]-y_model[y_model!=0])*(y_model[y_model!=0]-yOn[y_model!=0])**2./y_model[y_model!=0]
+				ax[1].errorbar(xOn[y_model!=0], chi, yerr= 1, marker="+", ls="", c="k", label="chisq")
+			else:
+				chisq = sum((yOn[yOff!=0]-yOff[yOff!=0])**2/yOff[yOff!=0])
+				chi = np.sign(yOn[yOff!=0]-yOff[yOff!=0])*(yOff[yOff!=0]-yOn[yOff!=0])**2./yOff[yOff!=0]
+				ax[1].errorbar(xOn[yOff!=0], chi, yerr= 1, marker="+", ls="", c="k", label="chisq")
+			ax[0].text(0.95, 0.6, r"$\chi^2$ / dof = {:.1f} / {} = {:.2f}".format(chisq, dof, chisq/dof), ha="right", fontsize=12, transform=ax[0].transAxes)
+			ax[1].set_ylabel(r"$\chi^2$", fontsize=15)
+			ax[1].set_ylim(-max(abs(chi)+1.2), max(abs(chi)+1.2))
 
 	ax[1].set_xscale("log")
 	ax[1].set_xlabel("Energy [GeV]", fontsize=15)

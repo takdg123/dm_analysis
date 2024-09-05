@@ -72,6 +72,28 @@ def WINOspectra(x=None, M=None, return_table=False):
             M = np.ones(len(x))*M
             return spectra(np.asarray([dx,M]).T)
 
+def COSMIXspectra(channel, x_list, M, return_dNdx=False):
+    from ..external.COSMIXs.Interpolate import Interpolate
+
+    if channel == "ee":
+        channel = "e"
+    elif channel == "tt":
+        channel = "tau"
+    
+    spec = Interpolate(M, channel, "Gamma")
+
+    s = spec.make_spectrum()
+    s["dNdx"] = s["dNdLog10x"]*np.log10(np.exp(1))/10**s["Log10[x]"]
+    s["dNdE"] = s["dNdx"]/M
+
+    if return_dNdx:
+        interp = interp1d(s["Log10[x]"], s["dNdx"], fill_value="extrapolate")
+        return interp(np.log10(x_list))
+    else:
+        interp = interp1d(s["Log10[x]"], s["dNdE"], fill_value="extrapolate")
+        return interp(np.log10(x_list))
+
+
 def PPPCspectra(channel, x_list, M, PPPC=None, data = SCRIPT_DIR+"/external/PPPCSpectra/AtProduction_gammas.dat", return_dNdx=False, useScipy = True):
     
     if PPPC is None:

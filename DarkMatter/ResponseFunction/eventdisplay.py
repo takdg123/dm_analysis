@@ -20,6 +20,7 @@ from ..external.v2dl3.IrfInterpolator import IrfInterpolator
 #from ..V2DL3.interpolate import IrfInterpolator
 
 from scipy.interpolate import interp2d
+from scipy.interpolate import RegularGridInterpolator
 
 from ..utils import newirf
 
