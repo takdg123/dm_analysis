@@ -172,8 +172,15 @@ def classicNFW(dwarf, seed, props=[]):
     los=lambda x, b, props: calcNFWProfile(props, np.sqrt(b**2+x**2))**2
 
     if dwarf == "UMa_III":
-        props = [0.276, 1051.3, 87]
+        d = np.genfromtxt(const.REF_DIR+"urs3_11stars.dat")
+        if seed == -100:
+            props = [0.276, 1051.3, 87]
+            return props, los
+        elif seed == -1:
+            seed = random.randrange(0, len(d))
+        props = [d[seed][0]/1e9, d[seed][1]*1e3, 87]
         return props, los
+
     elif len(props) == 0:
         if seed == -1:
             seed = random.randrange(0, 100000)
@@ -216,7 +223,7 @@ def calcJProfile(dwarf, step=0.004, props = [], seed=-1, return_array=True, verb
         r_t = TruncationRadius[dwarf]
     else:
         props, los = classicNFW(dwarf, seed, props=props)
-        r_t = props[-1]
+        r_t = kwargs.pop("r_t", props[-1])
 
     theta = np.asarray([[th, step] for th in np.arange(step/2, 2, step=step)])
     

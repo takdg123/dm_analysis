@@ -49,28 +49,93 @@ def WINOspectra(x=None, M=None, return_table=False):
     tab = Table(np.load(REF_DIR+"wino_dnde.npy"))
     if return_table:
         return tab
+
+    if (np.size(x) == 1) and (abs(x_list-1.0) < 1e-8):
+        log10x = np.asarray([0])
+    else:
+        log10x = np.atleast_1d(np.log10(x))
+
+    include_delta = (0 in log10x)
+
     if M in list(tab["mass"]):
         tab = tab[tab["mass"]==M]
-        spectra = interp1d(tab["x"], tab["dNdE"])
-        return spectra(x)
+        spectra = interp1d(np.log10(tab["x"]), tab["dNdE"])
+        dnde = spectra(log10x)
+        spectra = interp1d(np.log10(tab["x"]), tab["dNdE_endpoint"])
+        dnde = spectra(log10x)
+        #dnde = dnde - dnde2
+        #dnde = np.zeros(len(log10x))
+        if include_delta:
+            dnde[-1] = 0
+            delta = 0#spectra(0)
+        else:
+            delta = 0
+
+        if len(x) == 1:
+            return dnde[0], delta
+        else:
+            return dnde, delta
     else:
         from scipy.interpolate import RegularGridInterpolator
         dx = list(set(tab["x"]))
         dy = list(set(tab["mass"]))
         dx.sort()
         dy.sort()
+        dx= np.asarray(dx)
 
         z = []
         for i in dx:
             z.append([tab[(tab["x"]==i) * (tab["mass"]==j)]["dNdE"][0] for j in dy])
 
-        spectra = RegularGridInterpolator((dx,dy), z)
+        spectra = RegularGridInterpolator((np.log10(dx),dy), z)
         
         if np.size(x)==np.size(M):
-            return spectra((x, M))
+            dNdE = spectra((log10x, M))
+            if include_delta:
+                dNdE[-1] = 0
+                delta = spectra((0, M))
+            else:
+                delta = 0
+
+        else:
+            M = np.ones(len(log10x))*M
+            dNdE = spectra(np.asarray([log10x, M]).T)
+            if include_delta:
+                dNdE[-1] = 0
+                delta = spectra(([0, M]).T)
+            else:
+                delta = 0
+        return dNdE, delta
+
+def Qspectra(x=None, M=None, return_table=False):
+    tab = Table(np.load(REF_DIR+"quintuplet_dnde.npy"))
+    if return_table:
+        return tab
+    if M in list(tab["mass"]):
+        tab = tab[tab["mass"]==M]
+        tab = tab[tab.argsort("x")]
+        spectra = interp1d(np.log10(tab["x"]), tab["dNdE"])
+        return spectra(np.log10(x))
+    else:
+        from scipy.interpolate import RegularGridInterpolator
+        dx = list(set(tab["x"]))
+        dy = list(set(tab["mass"]))
+        dx.sort()
+        dy.sort()
+        dx= np.asarray(dx)
+
+        z = []
+        for i in dx:
+            z.append([tab[(tab["x"]==i) * (tab["mass"]==j)]["dNdE"][0] for j in dy])
+
+        spectra = RegularGridInterpolator((np.log10(dx),dy), z)
+        
+        if np.size(x)==np.size(M):
+            return spectra((np.log10(x), M))
         else:
             M = np.ones(len(x))*M
-            return spectra(np.asarray([dx,M]).T)
+            return spectra(np.asarray([np.log10(x),M]).T)
+
 
 def COSMIXspectra(channel, x_list, M, return_dNdx=False):
     from ..external.COSMIXs.Interpolate import Interpolate

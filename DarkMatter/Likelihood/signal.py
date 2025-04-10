@@ -4,7 +4,7 @@ import os
 
 from ROOT import TFile, TH1D, TH2D, TMath
 
-from .spectra import readSpectrum, PPPCspectra, HDMspectra, WINOspectra, COSMIXspectra, gridInterpolation
+from .spectra import readSpectrum, PPPCspectra, HDMspectra, WINOspectra, Qspectra, COSMIXspectra, gridInterpolation
 
 from .. import ResponseFunction
 from .. import const, utils
@@ -16,6 +16,8 @@ from scipy.interpolate import interp1d, interp2d
 import random
 
 from tqdm.notebook import tqdm
+
+from scipy.integrate import simps
 
 from ..ResponseFunction.eventdisplay import th2cut_ext
 
@@ -65,13 +67,6 @@ def calcSignal(dwarf, M, irf, package="EventDisplay", DM_spectra="PPPC",
     # Signal spectrum
     if verbose:
         print("[Log] Importing the DM spectrum (channel: {}).".format(channel))
-    
-    if channel == "delta":
-        PPPC_spec = None
-    elif DM_spectra == "PPPC" and useScipy:
-        PPPC_spec = gridInterpolation(channel=channel)
-    elif DM_spectra=="PPPC":
-        PPPC_spec = readSpectrum(channel)
 
     apply_factor = kwargs.pop("apply_factor", False)
 
@@ -80,7 +75,10 @@ def calcSignal(dwarf, M, irf, package="EventDisplay", DM_spectra="PPPC",
     else:
         factor = 1
 
-    nfactor = t_exp/(8*np.pi*pow(M, 2))*10**sigma*factor
+    if DM_spectra == "powerlaw":
+        nfactor = t_exp*10**sigma*factor
+    else:
+        nfactor = t_exp/(8*np.pi*pow(M, 2))*10**sigma*factor
 
     # J profile
     if jArray:
@@ -167,7 +165,7 @@ def calcSignal(dwarf, M, irf, package="EventDisplay", DM_spectra="PPPC",
         
     if package=="EventDisplay":
         if ext:
-            eBinEdges = kwargs.get("energyEdges", np.logspace(2, 7, 101))
+            eBinEdges = kwargs.get("energyEdges", np.logspace(1, 7, 101))
         else:
             eBinEdges = kwargs.get("energyEdges", const.energyEdges)
         
@@ -207,7 +205,7 @@ def calcSignal(dwarf, M, irf, package="EventDisplay", DM_spectra="PPPC",
             Etr_u = hg_1d.GetXaxis().GetBinUpEdge(i)
             Etr_l = hg_1d.GetXaxis().GetBinLowEdge(i)
             dEtr = Etr_u-Etr_l
-            if Etr < 70:
+            if Etr < 75:
                 continue
         else:
             if useBias:
@@ -226,11 +224,14 @@ def calcSignal(dwarf, M, irf, package="EventDisplay", DM_spectra="PPPC",
             continue
         # Effective Area
         Elog10TeV = np.log10(Etr/1000.0)
-        
-        if gEA.Class_Name() == "TH1D":
-            A = gEA.Interpolate(Elog10TeV)  
+        fixedA = kwargs.get("fixedA", False)
+        if fixedA:
+            A = fixedA
         else:
-            A = gEA.Eval(Elog10TeV)         
+            if gEA.Class_Name() == "TH1D":
+                A = gEA.Interpolate(Elog10TeV)  
+            else:
+                A = gEA.Eval(Elog10TeV)         
         
         A *= 1e4        
         if A <= 0:
@@ -248,18 +249,35 @@ def calcSignal(dwarf, M, irf, package="EventDisplay", DM_spectra="PPPC",
             if (Etr>eUpperCut):
                 dNdE = 0
                 continue
+            elif DM_spectra == "powerlaw":
+                powerlaw = lambda E: 1e7*(E/1e3)**-2
+                dNdE = powerlaw(Etr)
             elif x < 1.001 and x>=1e-6:
                 x_u = Etr_u/M
                 x_l = Etr_l/M
                 if x_u > 1:
                     x_u = 1
-                x_list = np.linspace(x_l, x_u, 100)
+                x_list = np.linspace(x_l, x_u, 1000)
                 dx = np.diff(x_list)
+                
+                if channel.lower() == "wino" or DM_spectra == "WINO":
+                    dNdE, delta = WINOspectra(x=x_list, M=M)
+                    dNdE = simps(dNdE, x_list)/dEtr*M
+                    dNdE += delta/dEtr*M
 
-                if channel == "wino" or DM_spectra == "WINO":
-                    dNdE = WINOspectra(x=x, M=M)
+                elif channel.lower() == "quintuplet" or DM_spectra == "quintuplet":
+                    if np.log10(x)<-3:
+                        dNdE = 0
+                    dNdE = Qspectra(x=x, M=M)
 
                 elif DM_spectra == "PPPC":
+                    if channel == "delta":
+                        PPPC_spec = None
+                    elif useScipy:
+                        PPPC_spec = gridInterpolation(channel=channel)
+                    else:
+                        PPPC_spec = readSpectrum(channel)
+
                     dNdE = PPPCspectra(channel, x_list, M,  PPPC=PPPC_spec, useScipy=useScipy)
                     dNdE = (sum(utils.center_pt(dNdE)*dx)/(x_u-x_l))
 
@@ -275,6 +293,7 @@ def calcSignal(dwarf, M, irf, package="EventDisplay", DM_spectra="PPPC",
                 elif DM_spectra == "COSMIX":
                     dNdE = COSMIXspectra(channel, x_list, M)
                     dNdE = (sum(utils.center_pt(dNdE)*dx)/(x_u-x_l))
+
 
                 if dNdE < 0:
                     dNdE = 0
@@ -355,7 +374,9 @@ def calcSignal(dwarf, M, irf, package="EventDisplay", DM_spectra="PPPC",
             for k in range(1, len(tBinEdges)):
 
                 th2 = (tBinEdges[k]+tBinEdges[k-1])/2.
-                if addTheta:
+                if DM_spectra == "powerlaw":
+                    j_E = 1
+                elif addTheta:
                     j_temp = jProfile_2d(np.log10(Etr), th)[::,0]
                     if th2 < th2Cut:
                         j_E = JProfile.convert2Dto1D(np.asarray([th, j_temp]).T, package=package, ext=ext, th_ran=[np.sqrt(tBinEdges[k-1]), np.sqrt(tBinEdges[k])])
@@ -363,9 +384,9 @@ def calcSignal(dwarf, M, irf, package="EventDisplay", DM_spectra="PPPC",
                         j_E = 0
                         continue
                 else:
-
                     j_E = jProfile_1d(Etr)
-                    
+                
+
                 
                 # Multiply all (dN/dE' J(E') A(E') D(E|E') dE')
                 if j_E > 0 and not(np.isnan(j_E)):  

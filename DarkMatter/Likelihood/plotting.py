@@ -378,11 +378,14 @@ def plotPublication(channel, print_chan=True, textloc=0.5, log_label=False, **kw
         else:
             plt.ylim(8e-27, 2e-20)
 
-def plotPredictedLine(ax=None, units="GeV", addRelic = False, **kwargs):
+def plotPredictedLine(ax=None, units="GeV", addRelic = False, quintuplet=False, **kwargs):
     from astropy.table import Table
     if ax is None:
         ax = plt.gca()
-    data = Table(np.load(REF_DIR+"/sigvLineNLL.npy"))
+    if quintuplet:
+        data = Table(np.load(REF_DIR+"/sigvLineNLLQ.npy"))
+    else:
+        data = Table(np.load(REF_DIR+"/sigvLineNLL.npy"))
     if units=="TeV":
         data["mass"]/=1000
         if addRelic:
@@ -390,7 +393,7 @@ def plotPredictedLine(ax=None, units="GeV", addRelic = False, **kwargs):
     elif addRelic:
         ax.axvspan(2700, 3000, color="red", label="Thermal WINO mass", alpha=0.5)
 
-    ax.plot(data["mass"], data["signu"], label="WINO prediction", **kwargs)
+    ax.plot(data["mass"], data["signu"], label=kwargs.pop("label","WINO prediction"), **kwargs)
 
 
 def plotUnitarity(composite=[1e-1, 1e-2, 1e-3], vrel = 2.e-5, log_label=False):

@@ -193,7 +193,7 @@ class MLE:
                     self._signu0 = -21
                 else:
                     self._signu0 = -25
-            elif self.channel == "wino":
+            elif self.channel == "wino" or self.channel == "quintuplet":
                 self._signu0 = -24
 
 
