@@ -222,9 +222,11 @@ def calcSignal(dwarf, M, irf, package="EventDisplay", DM_spectra="PPPC",
 
         if Etr < 70:
             continue
+
         # Effective Area
         Elog10TeV = np.log10(Etr/1000.0)
         fixedA = kwargs.get("fixedA", False)
+
         if fixedA:
             A = fixedA
         else:
@@ -239,7 +241,9 @@ def calcSignal(dwarf, M, irf, package="EventDisplay", DM_spectra="PPPC",
 
         # Signal spectrum
         x = Etr/M
-
+        x_u = round(Etr_u/M*1e6)/1e6
+        x_l = round(Etr_l/M*1e6)/1e6
+        
         if channel == "delta":
             if abs(x -1.0) < 0.01:
                 dNdE = 2./dEtr
@@ -252,23 +256,31 @@ def calcSignal(dwarf, M, irf, package="EventDisplay", DM_spectra="PPPC",
             elif DM_spectra == "powerlaw":
                 powerlaw = lambda E: 1e7*(E/1e3)**-2
                 dNdE = powerlaw(Etr)
-            elif x < 1.001 and x>=1e-6:
-                x_u = Etr_u/M
-                x_l = Etr_l/M
+            elif (x_l < 1) and (x_u>=1e-6):
                 if x_u > 1:
                     x_u = 1
-                x_list = np.linspace(x_l, x_u, 1000)
-                dx = np.diff(x_list)
+
+                if x_l < 10**-3.5:
+                    x_l = 10**-3.5
+
+                if x_l >= x_u:
+                    x_list = [1]
+                    dx = 0
+                else:
+                    x_list = np.linspace(x_l, x_u, 3000)
+                    dx = np.diff(x_list)
+                
                 
                 if channel.lower() == "wino" or DM_spectra == "WINO":
                     dNdE, delta = WINOspectra(x=x_list, M=M)
-                    dNdE = simps(dNdE, x_list)/dEtr*M
+                    if np.size(dNdE)!=1:
+                        dNdE = simps(dNdE, x_list)/dEtr*M
                     dNdE += delta/dEtr*M
 
                 elif channel.lower() == "quintuplet" or DM_spectra == "quintuplet":
-                    if np.log10(x)<-3:
-                        dNdE = 0
-                    dNdE = Qspectra(x=x, M=M)
+                    dNdE, delta = Qspectra(x=x_list, M=M)
+                    dNdE = simps(dNdE, x_list)/dEtr*M
+                    dNdE += delta/dEtr*M
 
                 elif DM_spectra == "PPPC":
                     if channel == "delta":
@@ -279,16 +291,14 @@ def calcSignal(dwarf, M, irf, package="EventDisplay", DM_spectra="PPPC",
                         PPPC_spec = readSpectrum(channel)
 
                     dNdE = PPPCspectra(channel, x_list, M,  PPPC=PPPC_spec, useScipy=useScipy)
-                    dNdE = (sum(utils.center_pt(dNdE)*dx)/(x_u-x_l))
+                    if np.size(x_list) != 1:
+                        dNdE = (sum(utils.center_pt(dNdE)*dx)/(x_u-x_l))
 
                     #dNdE = PPPCspectra(channel, x, M,  PPPC=PPPC_spec, useScipy=useScipy)[0]
                     
                 elif DM_spectra == "HDM":
-
                     dNdE, delta = HDMspectra(channel, x_list, M)
                     dNdE = (sum(utils.center_pt(dNdE)*dx)/(x_u-x_l))
-                    
-                    #dNdE, delta = HDMspectra(channel, x, M)
                     dNdE += delta/dEtr
                 elif DM_spectra == "COSMIX":
                     dNdE = COSMIXspectra(channel, x_list, M)
@@ -299,6 +309,7 @@ def calcSignal(dwarf, M, irf, package="EventDisplay", DM_spectra="PPPC",
                     dNdE = 0
 
             else:
+                
                 dNdE = 0
                 continue
         
@@ -306,6 +317,7 @@ def calcSignal(dwarf, M, irf, package="EventDisplay", DM_spectra="PPPC",
             norm = 1
         else:
             norm = 0
+            
             
             for j in range(1, hg_1d.GetNbinsX()+1):
                 E = hg_1d.GetXaxis().GetBinCenter(j)
@@ -320,10 +332,16 @@ def calcSignal(dwarf, M, irf, package="EventDisplay", DM_spectra="PPPC",
 
                 if useBias:
                     ratio = E/Etr
+                    r_l = E_l/Etr
+                    r_u = E_u/Etr
+                    r_bins = np.linspace(r_l, r_u, 1000)
                     if ratio > 3:
                         continue
                     
                     D = hDisp.Interpolate(np.log10(Etr)-3, ratio)
+                    #D_bins = [hDisp.Interpolate(np.log10(Etr)-3, r) for r in r_bins]
+                    #D2 = simps(D_bins, r_bins)/(r_u-r_l)
+                    #print(D, D2)
                 else:
                     
                     D = hDisp.Interpolate(Etr, E)
@@ -331,6 +349,7 @@ def calcSignal(dwarf, M, irf, package="EventDisplay", DM_spectra="PPPC",
 
                 if D>0:
                     norm +=D*dE
+            
             
             if norm == 0:
                 continue
