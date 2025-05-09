@@ -54,12 +54,11 @@ def WINOspectra(x=None, M=None, return_table=False):
 
 def Qspectra(x=None, M=None, return_table=False):
 
-    tab = Table(np.load(REF_DIR+"dnde_quintuplet.npy"))
+    tab = Table(np.load(REF_DIR+"quintuplet_dnde.npy"))
     if return_table:
         return tab
 
     return get_spectra_from_table(x, M, tab)
-
 
 
 def COSMIXspectra(channel, x_list, M, return_dNdx=False):

@@ -384,17 +384,19 @@ def plotPredictedLine(ax=None, units="GeV", addRelic = False, quintuplet=False, 
         ax = plt.gca()
     if quintuplet:
         data = Table(np.load(REF_DIR+"/sigvLineNLLQ.npy"))
+        mass = np.array([13600-800., 13600+800.])
     else:
         data = Table(np.load(REF_DIR+"/sigvLineNLL.npy"))
+        mass = np.array([2700., 3000.])
+
     if units=="TeV":
         data["mass"]/=1000
-        if addRelic:
-            ax.axvspan(2.7, 3.0, color="red", label="Thermal WINO mass", alpha=0.5)
-    elif addRelic:
-        ax.axvspan(2700, 3000, color="red", label="Thermal WINO mass", alpha=0.5)
-
-    ax.plot(data["mass"], data["signu"], label=kwargs.pop("label","WINO prediction"), **kwargs)
-
+        mass /= 1000.
+    
+    ax.plot(data["mass"], data["signu"], label=kwargs.pop("label","WINO prediction"), ls=kwargs.pop("ls", ":"), color=kwargs.pop("color", "r"), **kwargs)
+    
+    ax.axvspan(mass[0], mass[1], color="red", label="Thermal WINO mass", alpha=0.5)
+    
 
 def plotUnitarity(composite=[1e-1, 1e-2, 1e-3], vrel = 2.e-5, log_label=False):
     TeV2cm3s = 1.1673299710900705e-23

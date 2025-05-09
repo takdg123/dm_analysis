@@ -71,8 +71,13 @@ def extract_irf_1d(filename, irf_name, azimuth=None):
 
     return a multidimensional array
     """
-
-    fast_eff_area = uproot.open(filename)["fEffAreaH2F"]
+    irf = uproot.open(filename)
+    if "fEffAreaH2F;1" in irf.keys():
+        fast_eff_area = uproot.open(filename)["fEffAreaH2F"]
+    elif "fEffArea;1" in irf.keys():
+        fast_eff_area = uproot.open(filename)["fEffArea"]
+    else:
+        raise ValueError(f"A proper key is not in IRFs: {filename} (either fEffAreaH2F or fEffArea)")
 
     # select az bin and define az mask
     _, azMaxs = load_parameter("azMax", fast_eff_area)
@@ -91,12 +96,21 @@ def extract_irf_1d(filename, irf_name, azimuth=None):
 
     for i in range(len(irf)):
         try:
-            data[
-                :,
-                find_nearest(pedvars, all_pedvars[i]),
-                find_nearest(zds, all_zds[i]),
-                find_nearest(woffs, all_Woffs[i]),
-            ] = irf[i]
+            if len(irf[i]) == len(irf[0]):
+                data[
+                    :,
+                    find_nearest(pedvars, all_pedvars[i]),
+                    find_nearest(zds, all_zds[i]),
+                    find_nearest(woffs, all_Woffs[i]),
+                ] = irf[i]
+            else:
+                intp = interp1d(energies[i], irf[i], fill_value="extrapolate")
+                data[
+                    :,
+                    find_nearest(pedvars, all_pedvars[i]),
+                    find_nearest(zds, all_zds[i]),
+                    find_nearest(woffs, all_Woffs[i]),
+                ] = intp(energies[0])
         except Exception:
             logging.exception("Unexpected error:", sys.exc_info()[0])
             logging.exception("Entry number ", i)
