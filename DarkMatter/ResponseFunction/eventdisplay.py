@@ -372,7 +372,7 @@ class EventDisplay:
 		#except:
 
 		exposure = getParsFromLog(dwarf, runNum, ext=ext)["livetime"]
-
+		
 		gExp = TGraph()
 		gExp.SetName("ExposureTime")
 		gExp.SetTitle("Exposure Time ({})".format(dwarf))

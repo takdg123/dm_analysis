@@ -393,9 +393,10 @@ def plotPredictedLine(ax=None, units="GeV", addRelic = False, quintuplet=False, 
         data["mass"]/=1000
         mass /= 1000.
     
+    ax.axvspan(mass[0], mass[1], color="red", label=kwargs.pop("blabel","Thermal WINO mass"), alpha=0.5)
+    
     ax.plot(data["mass"], data["signu"], label=kwargs.pop("label","WINO prediction"), ls=kwargs.pop("ls", ":"), color=kwargs.pop("color", "r"), **kwargs)
     
-    ax.axvspan(mass[0], mass[1], color="red", label="Thermal WINO mass", alpha=0.5)
     
 
 def plotUnitarity(composite=[1e-1, 1e-2, 1e-3], vrel = 2.e-5, log_label=False):

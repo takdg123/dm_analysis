@@ -178,6 +178,8 @@ def classicNFW(dwarf, seed, props=[]):
             return props, los
         elif seed == -1:
             seed = random.randrange(0, len(d))
+        elif seed > len(d):
+            seed = random.randrange(0, len(d))
         props = [d[seed][0]/1e9, d[seed][1]*1e3, 87]
         return props, los
 

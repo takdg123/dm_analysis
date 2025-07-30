@@ -105,8 +105,10 @@ def calcUpperLimits(dwarf, channel, package="EventDisplay",
         if jSeed == "median":
             jSeed = defaultNum[dwarf]
         elif jSeed == -1:
-            jSeed = random.randrange(0, 100000)
-
+            if ext:
+                jSeed = random.randrange(0, 100000)
+            else:
+                jSeed = random.randrange(0, JProfile.goodPropNum(dwarf)-1)
 
         if verbosity>1:
             print("[Log] Importing the J profile (seed: {}).".format(jSeed))
@@ -243,7 +245,7 @@ def calcUpperLimits(dwarf, channel, package="EventDisplay",
 def calcExpectedLimits(dwarf, channel, package="EventDisplay", 
     irf=None, jProfile = None, jArray=True, version="all", th2Cut = 0, 
     addTheta=False, averagedIRF=True, method = 1, fix_b=False, 
-    filename = None, seed=3, jSeed = -1,
+    filename = None, seed=3, jSeed = "median",
     mass = np.logspace(2, 4.5, 12), 
     bkgModel=None, ext=False, test=False, 
     verbosity=True, runs = 1000, multi=True, **kwargs):
@@ -254,7 +256,8 @@ def calcExpectedLimits(dwarf, channel, package="EventDisplay",
         th2Cut = defineTheta2Cut(package, th2Cut)
 
     useBias = kwargs.get("useBias", True)
-
+    sigma = kwargs.get("sigma", -23)
+    
     if package=="EventDisplay":
         if channel == "delta" or channel == "gamma":
             if not(useBias):
@@ -335,7 +338,7 @@ def calcExpectedLimits(dwarf, channel, package="EventDisplay",
         N_off = kwargs.pop("N_off", len(bkg))
     else:
         bkg = raw_events[raw_events[:,2]==0.0]
-        alpha = raw_events[:,3][0]
+        alpha = np.average(raw_events[:,3])
         N_on = len(bkg)*alpha
         N_off = len(bkg)
 
@@ -343,8 +346,15 @@ def calcExpectedLimits(dwarf, channel, package="EventDisplay",
 
     
     if jProfile is None:
-        if jArray and jSeed == -1:
-            jSeed = random.randrange(0, JProfile.goodPropNum(dwarf)-1)
+        if jArray:
+            if jSeed == "median":
+                jSeed = defaultNum[dwarf]
+            elif jSeed == -1:
+                if ext:
+                    jSeed = random.randrange(0, 100000)
+                else:
+                    jSeed = random.randrange(0, JProfile.goodPropNum(dwarf)-1)
+
 
         jProfile = JProfile.generateConvolvedJ(dwarf, package, irf=importedIRF, version=version, return_array=True, seed = jSeed, verbose=False,  th2Cut=th2Cut, ext=ext)
     
@@ -352,12 +362,12 @@ def calcExpectedLimits(dwarf, channel, package="EventDisplay",
     for i, M in enumerate(mass):
         ul[M] = []
         if singleIRF:
-            hSignal[M] = calcSignal(dwarf, M, importedIRF, package, eLowerCut=min(bkg[:,0]), jProfile=jProfile, channel=channel, addTheta=addTheta, th2Cut=th2Cut, version=version, jArray=jArray, jSeed=jSeed, verbose=False, ext=ext, DM_spectra=DM_spectra)
+            hSignal[M] = calcSignal(dwarf, M, importedIRF, package, eLowerCut=min(bkg[:,0]), jProfile=jProfile, channel=channel, addTheta=addTheta, th2Cut=th2Cut, version=version, jArray=jArray, jSeed=jSeed, verbose=False, ext=ext, DM_spectra=DM_spectra, sigma=sigma)
             hSignal[M].SetDirectory(0)
         else:
             hSignal[M] = {}
             for v in listOfVersions(dwarf):
-                hSignal[M][v] = calcSignal(dwarf, M, importedIRF[v], package, eLowerCut=min(bkg[:,0]), jProfile=jProfile, channel=channel, addTheta=addTheta, th2Cut=th2Cut, version=version, jArray=jArray, jSeed=jSeed, verbose=False, ext=ext, DM_spectra=DM_spectra)
+                hSignal[M][v] = calcSignal(dwarf, M, importedIRF[v], package, eLowerCut=min(bkg[:,0]), jProfile=jProfile, channel=channel, addTheta=addTheta, th2Cut=th2Cut, version=version, jArray=jArray, jSeed=jSeed, verbose=False, ext=ext, DM_spectra=DM_spectra, sigma=sigma)
                 hSignal[M][v].SetDirectory(0)
 
     if verbosity>1:
@@ -377,10 +387,9 @@ def calcExpectedLimits(dwarf, channel, package="EventDisplay",
     manager = multiprocess.Manager()
 
     for j in range(runs):
-
+        
         N_on_poi = np.random.poisson(N_on)
         N_off_poi = np.random.poisson(N_off)
-
         if N_on_poi == 0:
             N_on_poi = 1
         
@@ -412,7 +421,7 @@ def calcExpectedLimits(dwarf, channel, package="EventDisplay",
                     "averagedIRF":averagedIRF, "tau":tau, "version":version, 
                     "seed":seed, "pN": i, "ext":ext, "N_off": N_off_poi,
                     "bkgModel":bkgModel, "N_on": N_on_poi, "hOff": hOff,
-                    "verbosity":verbosity, "hOn": hOn,
+                    "verbosity":verbosity, "hOn": hOn, "sigma": sigma,
                     "events": events,  "hSignal":hSignal[M], **kwargs}
                 p = multiprocess.Process(target=multiprocessing_mle, args=(dwarf, M, package, output, ), kwargs=mle_kwargs)
                 processes.append(p)
@@ -423,7 +432,7 @@ def calcExpectedLimits(dwarf, channel, package="EventDisplay",
                         averagedIRF=averagedIRF, version=version, 
                         seed=seed, expectedLimit=True, N_off=N_off_poi,
                         bkgModel=bkgModel, ext=ext, N_on=N_on_poi, hOff=hOff,
-                        verbose=(True if verbosity>1 else False), 
+                        verbose=(True if verbosity>1 else False), sigma=sigma,
                         events = events, hSignal=hSignal[M], hOn = hOn, **kwargs) 
                 mle.minuit(method=method, upperLimit=True, fix_b=fix_b, **kwargs)
                 ts_all.append(mle.ts)
@@ -576,7 +585,11 @@ def calcULSysError(dwarf, channel, package="EventDisplay",
 
         processes = []
         output = manager.dict()
-        jSeed = random.randrange(0, 100000)
+        if ext:
+            jSeed = random.randrange(0, 100000)
+        else:
+            jSeed = random.randrange(0, JProfile.goodPropNum(dwarf)-1)
+
         jProfile = JProfile.generateConvolvedJ(dwarf, package, irf=importedIRF, version=version, return_array=True, seed = jSeed, verbose=False, ext=ext)
         jSeeds.append(jSeed)
 
